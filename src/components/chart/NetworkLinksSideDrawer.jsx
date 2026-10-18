@@ -1015,18 +1015,54 @@ export default function NetworkLinksSideDrawer({
       const qualifyingLinks = [];
 
       groupsByLink.forEach((group) => {
+        // Sort descending by timestamp
         group.events.sort((a, b) => {
-          const ta = new Date(a.created_at || a.changed_at || 0).getTime();
-          const tb = new Date(b.created_at || b.changed_at || 0).getTime();
+          const ta = new Date(a.created_at || a.changed_at || a.timestamp || 0).getTime();
+          const tb = new Date(b.created_at || b.changed_at || b.timestamp || 0).getTime();
           return tb - ta;
         });
 
-        const dropCount = group.events.length;
+        // Deduplicate reciprocal events from both sides of the line (Device 1 and Device 2 logging the same transition)
+        const deduplicatedEvents = [];
+        group.events.forEach((ev) => {
+          const evTime = new Date(ev.created_at || ev.changed_at || ev.timestamp || 0).getTime();
+
+          const existingIndex = deduplicatedEvents.findIndex((existing) => {
+            if (ev.id != null && existing.id != null && ev.id === existing.id) {
+              return true;
+            }
+            const existingTime = new Date(
+              existing.created_at || existing.changed_at || existing.timestamp || 0
+            ).getTime();
+            // Same link down transition reported by both endpoints within 60s
+            if (evTime > 0 && existingTime > 0 && Math.abs(evTime - existingTime) <= 60000) {
+              return true;
+            }
+            return false;
+          });
+
+          if (existingIndex >= 0) {
+            // Enrich existing event with details if missing
+            const existing = deduplicatedEvents[existingIndex];
+            if (!existing.details && ev.details) {
+              existing.details = ev.details;
+            }
+          } else {
+            deduplicatedEvents.push(ev);
+          }
+        });
+
+        group.events = deduplicatedEvents;
+        const dropCount = deduplicatedEvents.length;
+
         if (dropCount >= 10) {
           qualifyingLinks.push({
             ...group,
             dropCount,
-            lastDropTime: group.events[0]?.created_at || group.events[0]?.changed_at,
+            lastDropTime:
+              deduplicatedEvents[0]?.created_at ||
+              deduplicatedEvents[0]?.changed_at ||
+              deduplicatedEvents[0]?.timestamp,
           });
         }
       });
@@ -1036,10 +1072,7 @@ export default function NetworkLinksSideDrawer({
       setFrequentDropLinks(qualifyingLinks);
       setLastDropsCheckTime(new Date());
 
-      // If at least one line has at least 10 link down events in the last 24h, show the popup
-      if (qualifyingLinks.length > 0) {
-        setIsDropsModalOpen(true);
-      }
+      // Auto-open removed: user can view the popup via the alert button/banner
     } catch (err) {
       console.error("Failed to check frequent link down events:", err);
     }

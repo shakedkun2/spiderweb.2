@@ -240,13 +240,37 @@ export default function FrequentLinkDropsModal({
           ) : (
             filteredLinks.map((link) => {
               const isExpanded = expandedLinkKeys.has(link.key || link.linkId);
-              const eventCount = link.dropCount;
+
+              // Deduplicate reciprocal events from both sides of the line (Device 1 and Device 2)
+              const events = (() => {
+                if (!Array.isArray(link.events) || link.events.length === 0) return [];
+                const sorted = [...link.events].sort((a, b) => {
+                  const ta = new Date(a.created_at || a.changed_at || a.timestamp || 0).getTime();
+                  const tb = new Date(b.created_at || b.changed_at || b.timestamp || 0).getTime();
+                  return tb - ta;
+                });
+                const deduped = [];
+                sorted.forEach((ev) => {
+                  const evTime = new Date(ev.created_at || ev.changed_at || ev.timestamp || 0).getTime();
+                  const isDup = deduped.some((existing) => {
+                    if (ev.id != null && existing.id != null && ev.id === existing.id) return true;
+                    const exTime = new Date(
+                      existing.created_at || existing.changed_at || existing.timestamp || 0
+                    ).getTime();
+                    return evTime > 0 && exTime > 0 && Math.abs(evTime - exTime) <= 60000;
+                  });
+                  if (!isDup) deduped.push(ev);
+                });
+                return deduped;
+              })();
+
+              const eventCount = events.length || link.dropCount;
               const lastDownFormatted = link.lastDropTime
                 ? formatDuration(link.lastDropTime)
-                : null;
+                : (events[0] ? formatDuration(events[0].created_at || events[0].changed_at) : null);
               const lastDownExact = link.lastDropTime
                 ? formatExactTime(link.lastDropTime)
-                : null;
+                : (events[0] ? formatExactTime(events[0].created_at || events[0].changed_at) : null);
 
               return (
                 <div
@@ -360,7 +384,7 @@ export default function FrequentLinkDropsModal({
                       </button>
 
                       {/* Expand / Collapse Drop Events Toggle */}
-                      {link.events && link.events.length > 0 && (
+                      {events && events.length > 0 && (
                         <button
                           type="button"
                           onClick={() => toggleExpand(link.key || link.linkId)}
@@ -376,7 +400,7 @@ export default function FrequentLinkDropsModal({
                           }
                           aria-expanded={isExpanded}
                         >
-                          <span>{link.events.length}</span>
+                          <span>{events.length}</span>
                           <ChevronDown
                             className={`w-3.5 h-3.5 transition-transform duration-200 ${
                               isExpanded ? "rotate-180" : ""
@@ -388,7 +412,7 @@ export default function FrequentLinkDropsModal({
                   </div>
 
                   {/* Expanded Drop Events List */}
-                  {isExpanded && link.events && link.events.length > 0 && (
+                  {isExpanded && events && events.length > 0 && (
                     <div
                       className={`p-3 border-t text-xs space-y-1.5 ${
                         isDark
@@ -397,10 +421,10 @@ export default function FrequentLinkDropsModal({
                       }`}
                     >
                       <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                        Recent Link Down Transitions ({link.events.length} Total)
+                        Recent Link Down Transitions ({events.length} Total)
                       </div>
                       <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                        {link.events.map((ev, idx) => {
+                        {events.map((ev, idx) => {
                           const evTime = ev.created_at || ev.changed_at;
                           const evDuration = formatDuration(evTime);
                           const evExact = formatExactTime(evTime);
