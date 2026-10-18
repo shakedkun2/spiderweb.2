@@ -42,9 +42,6 @@ const realtimeService = {
 
         // 4. Dispatch a standard Redux action, as if this came from a WebSocket.
         // The middleware has passed the store's dispatch function to this service.
-        console.log(
-          `[RealtimeService] Firing update for Link ${randomLink.id}: status -> ${nextStatus}`
-        );
         dispatch(updateTenGigLink(updatePayload));
       }
     }, 3500); // Fire an update every 3.5 seconds
@@ -57,7 +54,6 @@ const realtimeService = {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
-      console.log("[RealtimeService] Stopped.");
     }
   },
 };

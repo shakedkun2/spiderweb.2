@@ -5,8 +5,6 @@ import Cookies from "js-cookie";
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-//REACT_APP_API_URL=http://your-backend-api.com/api (instead of VITE_API_URL || "http://localhost:8000/api";)
-
 // --- Create a Centralized Axios Instance ---
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -18,7 +16,6 @@ const apiClient = axios.create({
 // --- Axios Interceptor for Authentication ---
 apiClient.interceptors.request.use(
   (config) => {
-    // The name of the cookie must match where you store it after login
     const token = Cookies.get("authToken");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -31,19 +28,12 @@ apiClient.interceptors.request.use(
 );
 
 // --- API Helper Function ---
-/**
- * A helper function to handle API calls and potential errors.
- * It assumes the backend returns data directly (not wrapped in a "response" key).
- * @param {Promise} request - The axios request promise.
- * @returns {Promise<any>} A promise that resolves to the response data.
- */
 const handleApiCall = async (request) => {
   try {
     const response = await request;
     return response.data;
   } catch (error) {
     console.error("API call failed:", error.response || error.message);
-    // Re-throw the error so the calling component/thunk can handle it (e.g., show a UI message)
     throw error;
   }
 };
@@ -85,11 +75,9 @@ export const api = {
     return uniqueSites.map((name, index) => ({ id: index + 1, name: name, core_site_name: name }));
   },
   getCoreDevices: async () => {
-    // 1. Fetch all networks
     const networks = await handleApiCall(apiClient.get("/networks")).catch(() => []);
     const allDevices = [];
 
-    // 2. Fetch sites for each network, then devices for each site
     await Promise.all(networks.map(async (network) => {
       try {
         const sites = await handleApiCall(apiClient.get(`/network/${network.id}/coresites`));
@@ -148,6 +136,19 @@ export const api = {
     handleApiCall(apiClient.post("/admin/network/create/", { name: netTypeData.name })),
   getWanConnection: (networkData) =>
     handleApiCall(apiClient.post("/get_wan_connection", networkData)).catch(() => ({ status: "connected" })),
+
+  // --- CORE TOPOLOGY Endpoints ---
+  executeManualPing: (linkId, config) => {
+    const { repeat = 10000, size = 9000, dfBit = false } = config || {};
+    return handleApiCall(
+      apiClient.post("/api/core-topology/ping-link", {
+        link_id: linkId,
+        repeat,
+        size,
+        df_bit: dfBit,
+      })
+    );
+  },
 
   // --- PUT (Update/Action) Endpoints ---
   makeUserAdmin: (userId) =>

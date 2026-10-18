@@ -56,15 +56,13 @@ const parseBpsToMbps = (value) => {
   if (value === undefined || value === null || value === "") return null;
   const num = typeof value === "number" ? value : parseFloat(value);
   if (isNaN(num)) return null;
-  if (num >= 1e9) {
-    return num / 1e6;
-  } else if (num >= 1e6) {
-    return num / 1e6;
-  } else if (num >= 1e3) {
-    return num / 1e3;
-  } else {
+  // Large values (>= 10000) are likely in bps, convert to Mbps
+  if (num >= 10000) {
     return num / 1e6;
   }
+  // Small values (< 10000) are assumed to be in Kbps, convert to Mbps
+  // 1 Kbps = 0.001 Mbps
+  return num / 1e3;
 };
 
 /**
@@ -150,7 +148,7 @@ const getStatusColor = (status, isDark = false) => {
 const getOspfStateColor = (ospfState, isDark = false) => {
   if (!ospfState) return { textClass: isDark ? "text-gray-400" : "text-gray-600" };
   const stateLower = String(ospfState).toLowerCase();
-  if (stateLower === "full" || stateLower === "enabled" || stateLower === "up") {
+  if (stateLower === "full" || stateLower === "established") {
     return { textClass: "text-emerald-600 dark:text-emerald-400" };
   } else if (stateLower === "down" || stateLower === "disabled") {
     return { textClass: "text-rose-600 dark:text-rose-400" };
@@ -163,16 +161,16 @@ const getOspfStateColor = (ospfState, isDark = false) => {
  * Get color for ping success rate
  */
 const getPingSuccessColor = (rate, isDark = false) => {
-  if (rate === undefined || rate === null || rate === "") {
-    return { textClass: isDark ? "text-gray-400" : "text-gray-600" };
+  if (rate === null || rate === undefined) {
+    return { textClass: "text-rose-600 dark:text-rose-400" };
   }
-  const numRate = typeof rate === "number" ? rate : parseFloat(rate);
-  if (isNaN(numRate)) {
-    return { textClass: isDark ? "text-gray-400" : "text-gray-600" };
-  }
-  if (numRate >= 90) {
+  const rateNum = typeof rate === "number" ? rate : parseFloat(rate);
+  if (isNaN(rateNum)) return { textClass: isDark ? "text-gray-400" : "text-gray-600" };
+  if (rateNum === 100) {
     return { textClass: "text-emerald-600 dark:text-emerald-400" };
-  } else if (numRate >= 70) {
+  } else if (rateNum >= 95) {
+    return { textClass: "text-emerald-600 dark:text-emerald-400" };
+  } else if (rateNum >= 70) {
     return { textClass: "text-yellow-600 dark:text-yellow-400" };
   } else {
     return { textClass: "text-rose-600 dark:text-rose-400" };
@@ -258,6 +256,286 @@ const DetailRow = ({ label, value, isDark, valueColorClass }) => (
     </span>
   </div>
 );
+
+/**
+ * Ping Config Modal / Popup
+ */
+export const PingConfigPopup = ({
+  isOpen,
+  onClose,
+  itemData,
+  onRunPing,
+  theme,
+}) => {
+  const [repeat, setRepeat] = useState(10000);
+  const [size, setSize] = useState(9000);
+  const [dfBit, setDfBit] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [pingResults, setPingResults] = useState(null);
+  const [pingError, setPingError] = useState(null);
+
+  const isDark = theme === "dark";
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsRunning(true);
+    setPingResults(null);
+    setPingError(null);
+
+    const config = {
+      repeat: parseInt(repeat, 10),
+      size: parseInt(size, 10),
+      dfBit,
+    };
+
+    // Extract linkId from itemData
+    const linkId = itemData?.id || itemData?.link_id || itemData?.rawLink?.id;
+
+    console.log("🔍 linkId:", linkId);
+    console.log("🔍 itemData:", itemData);
+    console.log("🔍 api.executeManualPing exists:", typeof api?.executeManualPing);
+
+    // Call the original onRunPing callback first
+    if (onRunPing) {
+      onRunPing(config, itemData);
+    }
+
+    // Try to run ping directly via API
+    try {
+      let results = null;
+
+      if (linkId && api && typeof api.executeManualPing === "function") {
+        const response = await api.executeManualPing(linkId, config);
+
+        console.log("📨 Raw API Response:", response);
+
+        // Extract results from response - handle different response formats
+        if (response) {
+          // Handle axios-style response with data property
+          results = response.data || response.result || response;
+        }
+
+        console.log("📊 Processed Results:", results);
+        setPingResults(results);
+      } else {
+        // Fallback: try other available methods
+        if (api && typeof api.runPing === "function") {
+          const results = await api.runPing({
+            target: itemData?.ip || itemData?.remote_ip || itemData?.remote_device_ip,
+            ...config,
+          });
+          setPingResults(results);
+        } else if (api && typeof api.ping === "function") {
+          const results = await api.ping({
+            target: itemData?.ip || itemData?.remote_ip || itemData?.remote_device_ip,
+            ...config,
+          });
+          setPingResults(results);
+        } else {
+          setPingError("Ping API method not available. Link ID: " + (linkId || "Not found"));
+          setIsRunning(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("❌ Ping execution error:", err);
+      setPingError(err.message || "Failed to execute ping");
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div
+        className={`relative w-full max-w-md p-6 rounded-2xl shadow-2xl border ${
+          isDark
+            ? "bg-gray-800 border-gray-700 text-gray-100"
+            : "bg-white border-gray-200 text-gray-800"
+        }`}
+      >
+        <div className="flex items-center justify-between pb-3 border-b mb-4">
+          <h3 className="text-lg font-bold">Configure Ping</h3>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+          >
+            <MdClose size={20} />
+          </button>
+        </div>
+
+        {/* Ping Results Display */}
+        {(pingResults || pingError) && !isRunning && (
+          <div
+            className={`mb-4 p-3 rounded-lg ${
+              pingError
+                ? "bg-red-500/10 border border-red-500/30"
+                : "bg-emerald-500/10 border border-emerald-500/30"
+            }`}
+          >
+            {pingError ? (
+              <div className="flex items-center gap-2">
+                <AlertTriangle
+                  size={16}
+                  className={isDark ? "text-red-400" : "text-red-600"}
+                />
+                <span
+                  className={`text-sm ${
+                    isDark ? "text-red-300" : "text-red-600"
+                  }`}
+                >
+                  {pingError}
+                </span>
+              </div>
+            ) : pingResults ? (
+              <div className="space-y-2">
+                {/* Header Row */}
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-sm font-semibold ${
+                      isDark ? "text-emerald-400" : "text-emerald-600"
+                    }`}
+                  >
+                    Success Rate
+                  </span>
+                  <span
+                    className={`text-2xl font-bold ${
+                      pingResults.ping_success_rate === 100
+                        ? "text-emerald-500"
+                        : "text-orange-500"
+                    }`}
+                  >
+                    {pingResults.ping_success_rate}%
+                  </span>
+                </div>
+
+                {/* Stats Row */}
+                <div
+                  className={`flex items-center justify-between text-xs ${
+                    isDark ? "text-gray-400" : "text-gray-500"
+                  }`}
+                >
+                  <span>
+                    {pingResults.packets_received?.toLocaleString() || 0} /{" "}
+                    {pingResults.packets_sent?.toLocaleString() || 0} packets
+                  </span>
+                  <span>{pingResults.packet_loss_rate || 0}% loss</span>
+                </div>
+
+                {/* RTT Row */}
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-xs ${
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    }`}
+                  >
+                    RTT (min/avg/max)
+                  </span>
+                  <span
+                    className={`text-sm font-semibold ${
+                      isDark ? "text-gray-200" : "text-gray-800"
+                    }`}
+                  >
+                    {pingResults.min_rtt_ms ?? "-"} /{" "}
+                    {pingResults.avg_rtt_ms ?? "-"} /{" "}
+                    {pingResults.max_rtt_ms ?? "-"} ms
+                  </span>
+                </div>
+
+                {/* Duration Row */}
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-xs ${
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    }`}
+                  >
+                    Duration
+                  </span>
+                  <span
+                    className={`text-xs ${
+                      isDark ? "text-gray-300" : "text-gray-700"
+                    }`}
+                  >
+                    {pingResults.duration_seconds
+                      ? `${pingResults.duration_seconds.toFixed(1)} seconds`
+                      : "-"}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase mb-1">
+              Repeat (Count)
+            </label>
+            <input
+              type="number"
+              value={repeat}
+              onChange={(e) => setRepeat(e.target.value)}
+              className={`w-full px-3 py-2 text-sm rounded-lg border ${
+                isDark
+                  ? "bg-gray-700 border-gray-600"
+                  : "bg-gray-50 border-gray-300"
+              }`}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase mb-1">
+              Packet Size (Bytes)
+            </label>
+            <input
+              type="number"
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+              className={`w-full px-3 py-2 text-sm rounded-lg border ${
+                isDark
+                  ? "bg-gray-700 border-gray-600"
+                  : "bg-gray-50 border-gray-300"
+              }`}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="dfBit"
+              checked={dfBit}
+              onChange={(e) => setDfBit(e.target.checked)}
+              className="rounded"
+            />
+            <label htmlFor="dfBit" className="text-sm">
+              DF Bit (Don't Fragment)
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className={`px-4 py-2 text-sm rounded-lg ${
+                isDark
+                  ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                  : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+              }`}
+            >
+              Close
+            </button>
+            <button
+              type="submit"
+              disabled={isRunning}
+              className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isRunning ? "Running..." : "Run Ping"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 /**
  * A modal popup that displays link/site details.
