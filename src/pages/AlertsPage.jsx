@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   MdErrorOutline,
@@ -10,17 +11,18 @@ import {
   MdFilterListOff,
   MdAutorenew,
   MdRefresh,
-  MdStar,
-  MdStarBorder,
 } from "react-icons/md";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  fetchAllAlerts,
-  deleteAlert,
-  favoriteAlert,
+  fetchAlerts,
   selectAllAlerts,
   selectAlertsStatus,
+  selectSelectedPeriod,
+  setSelectedPeriod,
 } from "../redux/slices/alertsSlice";
+import { selectTopologyDevices } from "../redux/slices/coreTopologySlice";
+import { selectAllDevices } from "../redux/slices/devicesSlice";
+import { getLinkNavigationTarget } from "../components/chart/linkNavigationHelpers";
 
 // --- HELPER COMPONENTS ---
 
@@ -36,24 +38,24 @@ const AlertIcon = ({ type, size = 24 }) => {
   return <MdInfoOutline className="text-blue-500 flex-shrink-0" size={size} />;
 };
 
-const AlertModal = ({ alert, onClose }) => {
-  const dispatch = useDispatch();
+const AlertModal = ({ alert, onClose, topologyDevices, allDevices }) => {
+  const navigate = useNavigate();
 
   if (!alert) return null;
 
-  const handleDelete = () => {
-    if (
-      window.confirm(
-        "Are you sure you want to delete this alert? This action cannot be undone."
-      )
-    ) {
-      dispatch(deleteAlert(alert.id));
-      onClose(); // Close the modal after the action is dispatched
-    }
-  };
+  const handleSeeLine = () => {
+    const navTarget =
+      getLinkNavigationTarget(alert.link, topologyDevices, allDevices) ||
+      alert.navigationTarget;
 
-  const handleFavorite = () => {
-    dispatch(favoriteAlert(alert.id));
+    if (navTarget && navTarget.path) {
+      navigate(navTarget.path, { state: navTarget.state });
+      onClose();
+    } else {
+      // Default to /l-chart if target can't be resolved
+      navigate("/l-chart");
+      onClose();
+    }
   };
 
   return (
@@ -149,35 +151,19 @@ const AlertModal = ({ alert, onClose }) => {
             </span>
           </p>
         </div>
-        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end items-center gap-3">
           <button
-            onClick={handleFavorite}
-            title={
-              alert.isFavorite ? "Remove from favorites" : "Add to favorites"
-            }
-            className="p-2 rounded-full text-gray-500 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 transition-colors"
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-semibold text-sm rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-colors"
           >
-            {alert.isFavorite ? (
-              <MdStar size={24} className="text-yellow-500" />
-            ) : (
-              <MdStarBorder size={24} className="hover:text-yellow-600" />
-            )}
+            Close
           </button>
-
-          <div className="space-x-3">
-            <button
-              onClick={handleDelete}
-              className="px-4 py-2 bg-red-600 text-white font-semibold text-sm rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition-colors"
-            >
-              Delete Alert
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-blue-600 text-white font-semibold text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors"
-            >
-              Close
-            </button>
-          </div>
+          <button
+            onClick={handleSeeLine}
+            className="px-4 py-2 bg-blue-600 text-white font-semibold text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors flex items-center gap-2"
+          >
+            <span>See Line</span>
+          </button>
         </div>
       </div>
     </div>
@@ -188,20 +174,15 @@ const AlertCard = ({ alert, onClick }) => {
   return (
     <div
       onClick={(e) => {
-        if (window.getSelection && window.getSelection().toString().trim().length > 0) return;
+        if (
+          window.getSelection &&
+          window.getSelection().toString().trim().length > 0
+        )
+          return;
         onClick(e);
       }}
       className="relative bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer border border-transparent dark:hover:border-blue-500 hover:border-blue-400 flex flex-col h-full"
     >
-      {/* NEW: Conditionally render the favorite star */}
-      {alert.isFavorite && (
-        <div
-          className="absolute top-2 right-2 text-yellow-400"
-          title="Favorited"
-        >
-          <MdStar size={20} />
-        </div>
-      )}
       <div className="flex items-start space-x-4 flex-grow">
         <AlertIcon type={alert.type} size={28} />
         <div className="flex-1 min-w-0">
@@ -226,17 +207,18 @@ const AlertCard = ({ alert, onClick }) => {
 };
 
 const timePeriods = [
-  { label: "1 Hour", value: "1h" },
-  { label: "10 Hours", value: "10h" },
   { label: "24 Hours", value: "24h" },
   { label: "1 Week", value: "1w" },
-  { label: "All Time", value: "all" },
+  { label: "2 Weeks", value: "2w" },
+  { label: "1 Month", value: "1m" },
 ];
+
 const alertTypes = [
   { value: "error", label: "Errors", color: "red" },
   { value: "warning", label: "Warnings", color: "yellow" },
   { value: "info", label: "Info", color: "blue" },
 ];
+
 const initialTypeState = { error: true, warning: true, info: true };
 
 const TypeFilterButton = ({ typeInfo, count, isActive, onClick }) => {
@@ -289,20 +271,33 @@ export function AlertsPage() {
   const dispatch = useDispatch();
   const allAlerts = useSelector(selectAllAlerts);
   const status = useSelector(selectAlertsStatus);
+  const reduxSelectedPeriod = useSelector(selectSelectedPeriod);
+  const topologyDevices = useSelector(selectTopologyDevices);
+  const allDevices = useSelector(selectAllDevices);
 
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState("1w");
+  const [selectedPeriodLocal, setSelectedPeriodLocal] = useState(
+    reduxSelectedPeriod || "24h"
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTypes, setSelectedTypes] = useState(initialTypeState);
   const parentRef = useRef(null);
   const [columnCount, setColumnCount] = useState(3);
 
+  // Sync redux period with local state
+  useEffect(() => {
+    if (reduxSelectedPeriod && reduxSelectedPeriod !== selectedPeriodLocal) {
+      setSelectedPeriodLocal(reduxSelectedPeriod);
+    }
+  }, [reduxSelectedPeriod]);
+
+  // Initial fetch if needed
   useEffect(() => {
     if (status === "idle") {
-      dispatch(fetchAllAlerts());
+      dispatch(fetchAlerts({ period: selectedPeriodLocal }));
     }
-  }, [status, dispatch]);
+  }, [status, selectedPeriodLocal, dispatch]);
 
   useEffect(() => {
     const updateColumnCount = () => {
@@ -315,59 +310,38 @@ export function AlertsPage() {
     return () => window.removeEventListener("resize", updateColumnCount);
   }, []);
 
-  // --- CORRECTED EFFECT ---
+  // Update selected alert when the list updates
   useEffect(() => {
-    // Only run the logic if there is a selected alert
     if (selectedAlert) {
-      // Find the latest version of this alert in the main Redux store list
       const updatedAlert = allAlerts.find((a) => a.id === selectedAlert.id);
-
       if (updatedAlert) {
-        // Only update local state if the object reference has changed
         if (updatedAlert !== selectedAlert) {
           setSelectedAlert(updatedAlert);
         }
       } else {
-        // If the alert is not found, it means it was deleted.
         setIsModalOpen(false);
         setSelectedAlert(null);
       }
     }
   }, [allAlerts, selectedAlert]);
- // <-- The corrected dependency array
 
-  // NEW: Step 1 - Sort the alerts first
+  // Step 1: Sort alerts newest first
   const sortedAlerts = useMemo(() => {
     if (!Array.isArray(allAlerts)) return [];
-    // Create a shallow copy to avoid mutating the original state
-    return [...allAlerts].sort((a, b) => {
-      // Prioritize favorited items
-      if (a.isFavorite && !b.isFavorite) return -1;
-      if (!a.isFavorite && b.isFavorite) return 1;
-
-      // For items with the same favorite status, sort by newest first
-      return new Date(b.timestamp) - new Date(a.timestamp);
-    });
+    return [...allAlerts].sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+    );
   }, [allAlerts]);
 
-  // MODIFIED: Step 2 - Filter the *sorted* list by time
+  // Step 2: Time filter window
   const timeFilteredAlerts = useMemo(() => {
     const now = new Date();
-    // Use the newly created sortedAlerts list
     const alertsWithDate = sortedAlerts.map((a) => ({
       ...a,
       timestamp: new Date(a.timestamp),
     }));
 
-    switch (selectedPeriod) {
-      case "1h":
-        return alertsWithDate.filter(
-          (a) => a.timestamp >= new Date(now.getTime() - 1 * 60 * 60 * 1000)
-        );
-      case "10h":
-        return alertsWithDate.filter(
-          (a) => a.timestamp >= new Date(now.getTime() - 10 * 60 * 60 * 1000)
-        );
+    switch (selectedPeriodLocal) {
       case "24h":
         return alertsWithDate.filter(
           (a) => a.timestamp >= new Date(now.getTime() - 24 * 60 * 60 * 1000)
@@ -377,11 +351,22 @@ export function AlertsPage() {
           (a) =>
             a.timestamp >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
         );
+      case "2w":
+        return alertsWithDate.filter(
+          (a) =>
+            a.timestamp >= new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+        );
+      case "1m":
+        return alertsWithDate.filter(
+          (a) =>
+            a.timestamp >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        );
       default:
         return alertsWithDate;
     }
-  }, [sortedAlerts, selectedPeriod]); // Depends on the sorted list now
+  }, [sortedAlerts, selectedPeriodLocal]);
 
+  // Count by alert type
   const alertCountsByType = useMemo(() => {
     return timeFilteredAlerts.reduce(
       (acc, alert) => {
@@ -392,16 +377,58 @@ export function AlertsPage() {
     );
   }, [timeFilteredAlerts]);
 
+  // Step 3: Word-tokenized search matching device names, lines, interfaces, and IPs
   const filteredAlerts = useMemo(() => {
-    const lowercasedTerm = searchTerm.toLowerCase();
+    const query = searchTerm.trim().toLowerCase();
+    const queryWords = query ? query.split(/\s+/).filter(Boolean) : [];
+
     return timeFilteredAlerts.filter((alert) => {
       if (!selectedTypes[alert.type]) return false;
-      if (
-        lowercasedTerm &&
-        !alert.message.toLowerCase().includes(lowercasedTerm) &&
-        !alert.networkLine.toLowerCase().includes(lowercasedTerm)
-      )
-        return false;
+
+      if (queryWords.length > 0) {
+        const link = alert.link || {};
+        const searchableFields = [
+          alert.message,
+          alert.networkLine,
+          alert.source,
+          alert.details,
+          alert.eventType,
+          alert.type,
+          alert.id,
+          link.id,
+          link.link_id,
+          link.sourceName,
+          link.targetName,
+          typeof link.source === "string" ? link.source : (link.source?.name || link.source?.id),
+          typeof link.target === "string" ? link.target : (link.target?.name || link.target?.id),
+          link.local_interface,
+          link.remote_interface,
+          link.interface,
+          link.sourceZone,
+          link.targetZone,
+          link.description,
+          link.local_interface_description,
+          link.local_link_ip,
+          link.remote_link_ip,
+          link.local_ip,
+          link.remote_ip,
+          link.local_device_ip,
+          link.remote_device_ip,
+          link.destinationIp,
+        ];
+
+        const searchableText = searchableFields
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        const matchesAllWords = queryWords.every((word) =>
+          searchableText.includes(word)
+        );
+
+        if (!matchesAllWords) return false;
+      }
+
       return true;
     });
   }, [timeFilteredAlerts, searchTerm, selectedTypes]);
@@ -415,20 +442,30 @@ export function AlertsPage() {
 
   const handleTypeChange = (type) =>
     setSelectedTypes((prev) => ({ ...prev, [type]: !prev[type] }));
+
   const handleResetFilters = () => {
     setSearchTerm("");
     setSelectedTypes(initialTypeState);
   };
+
   const handleAlertClick = (alert) => {
     setSelectedAlert(alert);
     setIsModalOpen(true);
   };
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedAlert(null);
   };
+
+  const handlePeriodChange = (newPeriod) => {
+    setSelectedPeriodLocal(newPeriod);
+    dispatch(setSelectedPeriod(newPeriod));
+    dispatch(fetchAlerts({ period: newPeriod, silent: false }));
+  };
+
   const handleRefresh = () => {
-    dispatch(fetchAllAlerts());
+    dispatch(fetchAlerts({ period: selectedPeriodLocal, silent: false }));
   };
 
   const renderContent = () => {
@@ -527,9 +564,9 @@ export function AlertsPage() {
               {timePeriods.map((period) => (
                 <button
                   key={period.value}
-                  onClick={() => setSelectedPeriod(period.value)}
+                  onClick={() => handlePeriodChange(period.value)}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-blue-500 ${
-                    selectedPeriod === period.value
+                    selectedPeriodLocal === period.value
                       ? "bg-blue-600 text-white shadow"
                       : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
                   }`}
@@ -567,7 +604,7 @@ export function AlertsPage() {
                 <input
                   id="search"
                   type="text"
-                  placeholder="Search message or line..."
+                  placeholder="Search message, device, line..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full sm:w-64 p-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
@@ -599,7 +636,12 @@ export function AlertsPage() {
         <div className="flex-grow min-h-0">{renderContent()}</div>
       </div>
       {isModalOpen && selectedAlert && (
-        <AlertModal alert={selectedAlert} onClose={handleCloseModal} />
+        <AlertModal
+          alert={selectedAlert}
+          onClose={handleCloseModal}
+          topologyDevices={topologyDevices}
+          allDevices={allDevices}
+        />
       )}
     </>
   );

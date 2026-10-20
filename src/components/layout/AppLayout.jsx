@@ -92,7 +92,7 @@ function AppLayout() {
     const path = location.pathname;
 
     if (path.startsWith("/admin")) return "Admin Panel";
-    if (path.startsWith("/notifications")) return "Alerts";
+    if (path.startsWith("/notifications")) return "Notifications";
 
     return "Dashboard";
   }, [location.pathname]);

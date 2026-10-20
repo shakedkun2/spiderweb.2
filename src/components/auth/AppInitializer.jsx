@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { createSelector } from "@reduxjs/toolkit";
 import { fetchInitialData } from "../../redux/slices/authSlice";
 import { startConnecting } from "../../redux/slices/realtimeSlice";
-import { fetchAllAlerts } from "../../redux/slices/alertsSlice"; // <-- NEW: Import alert thunk
+import { fetchAlerts } from "../../redux/slices/alertsSlice";
 import { fetchAllCoreSitesTraffic } from "../../redux/slices/coreSiteTrafficSlice";
 import { selectAllPikudim } from "../../redux/slices/corePikudimSlice";
 import { Loader2, AlertTriangle } from "lucide-react";
@@ -55,12 +55,13 @@ export function AppInitializer({ children }) {
 
   // --- Effect for immediate and periodic alert and core site traffic polling ---
   useEffect(() => {
-    let intervalId;
+    let alertsIntervalId;
+    let trafficIntervalId;
 
     // Start polling only when the core application data has successfully loaded.
     if (isSuccessful) {
       // Fetch alerts immediately on initial load
-      dispatch(fetchAllAlerts());
+      dispatch(fetchAlerts());
 
       // Fetch traffic for all core sites immediately on load
       const siteIds = allCoreSites && allCoreSites.length > 0
@@ -69,20 +70,23 @@ export function AppInitializer({ children }) {
 
       dispatch(fetchAllCoreSitesTraffic(siteIds));
 
-      // Set up the interval to dispatch polling every 15 seconds
-      intervalId = setInterval(() => {
-        dispatch(fetchAllAlerts());
+      // Alerts polling every 5 seconds
+      alertsIntervalId = setInterval(() => {
+        dispatch(fetchAlerts({ silent: true }));
+      }, 5000);
+
+      // Core site traffic polling every 15 seconds
+      trafficIntervalId = setInterval(() => {
         const currentIds = allCoreSites && allCoreSites.length > 0
           ? allCoreSites.map((s) => s.id)
           : Array.from({ length: 11 }, (_, i) => i + 1);
         dispatch(fetchAllCoreSitesTraffic(currentIds));
-      }, 15000); // 15,000 milliseconds = 15 seconds
+      }, 15000);
     }
 
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+      if (alertsIntervalId) clearInterval(alertsIntervalId);
+      if (trafficIntervalId) clearInterval(trafficIntervalId);
     };
   }, [isSuccessful, allCoreSites, dispatch]);
 
