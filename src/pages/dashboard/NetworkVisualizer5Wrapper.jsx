@@ -134,7 +134,7 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
     });
 
     if (devicesForChart.length === 0) {
-      return { nodes: [], links: [] };
+      return { nodes: [], links: [], drawerLinks: [] };
     }
 
     // Group devices by coresite_name (replaces pikudim lookup)
@@ -691,7 +691,7 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
     if (inspectHandledKeyRef.current === navKey) return;
 
     const foundLink =
-      graphData.drawerLinks.find(
+      (graphData.drawerLinks || []).find(
         (l) =>
           l.id === targetLinkId ||
           String(l.id) === String(targetLinkId) ||
@@ -700,7 +700,7 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
               l.allIds.includes(Number(targetLinkId)) ||
               l.allIds.includes(String(targetLinkId))))
       ) ||
-      graphData.links.find(
+      (graphData.links || []).find(
         (l) =>
           l.id === targetLinkId ||
           String(l.id) === String(targetLinkId) ||
@@ -728,7 +728,7 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
     if (!popupLink?.data) return;
     const currentId = popupLink.data.id || popupLink.data.linkId;
     if (!currentId) return;
-    const updated = graphData.drawerLinks.find(
+    const updated = (graphData.drawerLinks || []).find(
       (l) => l.id === currentId || (l.allIds && l.allIds.includes(currentId))
     );
     if (updated) {

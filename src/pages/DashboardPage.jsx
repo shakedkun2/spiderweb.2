@@ -661,8 +661,7 @@ export function DashboardPage({
           </Routes>
         }
       />
-      {/* Lowercase and legacy redirects for Libot */}
-      <Route path="/libot/*" element={<Navigate to="/Libot" replace />} />
+      {/* Legacy redirect for l-chart */}
       <Route path="/l-chart/*" element={<Navigate to="/Libot" replace />} />
 
       {/* Pikudim (replaces p-chart) */}
@@ -704,8 +703,7 @@ export function DashboardPage({
           </Routes>
         }
       />
-      {/* Lowercase and legacy redirects for Pikudim */}
-      <Route path="/pikudim/*" element={<Navigate to="/Pikudim" replace />} />
+      {/* Legacy redirect for p-chart */}
       <Route path="/p-chart/*" element={<Navigate to="/Pikudim" replace />} />
 
       {/* Default routes to redirect to the favorites tab */}
