@@ -49,7 +49,16 @@ const AlertModal = ({ alert, onClose, topologyDevices, allDevices }) => {
       alert.navigationTarget;
 
     if (navTarget && navTarget.path) {
-      navigate(navTarget.path, { state: navTarget.state });
+      const state = {
+        ...navTarget.state,
+        openInspectPopup: true,
+        inspectLinkId:
+          alert.link?.id ||
+          alert.link?.link_id ||
+          navTarget.state?.inspectLinkId,
+        selectedLink: alert.link || navTarget.state?.selectedLink,
+      };
+      navigate(navTarget.path, { state });
       onClose();
     } else {
       // Default to /l-chart if target can't be resolved
@@ -150,6 +159,38 @@ const AlertModal = ({ alert, onClose, topologyDevices, allDevices }) => {
               {alert.id}
             </span>
           </p>
+          {alert.history && alert.history.length > 1 && (
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-700/60 mt-3">
+              <strong className="text-gray-700 dark:text-gray-300 block mb-2 text-xs uppercase tracking-wider">
+                Event History for this Line:
+              </strong>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                {alert.history.map((h, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between text-xs p-2 rounded bg-gray-50 dark:bg-gray-700/60"
+                  >
+                    <span
+                      className={`font-semibold ${
+                        h.eventType === "link_down" || h.eventType === "ospf_drop"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-blue-600 dark:text-blue-400"
+                      }`}
+                    >
+                      {h.title || h.eventType}
+                    </span>
+                    <span className="text-gray-500 dark:text-gray-400 font-mono text-[11px]">
+                      {new Date(h.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end items-center gap-3">
           <button
@@ -329,41 +370,28 @@ export function AlertsPage() {
   const sortedAlerts = useMemo(() => {
     if (!Array.isArray(allAlerts)) return [];
     return [...allAlerts].sort(
-      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+      (a, b) =>
+        (b.timestampMs || new Date(b.timestamp).getTime() || 0) -
+        (a.timestampMs || new Date(a.timestamp).getTime() || 0)
     );
   }, [allAlerts]);
 
   // Step 2: Time filter window
   const timeFilteredAlerts = useMemo(() => {
-    const now = new Date();
-    const alertsWithDate = sortedAlerts.map((a) => ({
-      ...a,
-      timestamp: new Date(a.timestamp),
-    }));
+    const now = Date.now();
+    const periodHoursMap = {
+      "24h": 24,
+      "1w": 7 * 24,
+      "2w": 14 * 24,
+      "1m": 30 * 24,
+    };
+    const hours = periodHoursMap[selectedPeriodLocal] || 24;
+    const cutoff = now - hours * 60 * 60 * 1000;
 
-    switch (selectedPeriodLocal) {
-      case "24h":
-        return alertsWithDate.filter(
-          (a) => a.timestamp >= new Date(now.getTime() - 24 * 60 * 60 * 1000)
-        );
-      case "1w":
-        return alertsWithDate.filter(
-          (a) =>
-            a.timestamp >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        );
-      case "2w":
-        return alertsWithDate.filter(
-          (a) =>
-            a.timestamp >= new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
-        );
-      case "1m":
-        return alertsWithDate.filter(
-          (a) =>
-            a.timestamp >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        );
-      default:
-        return alertsWithDate;
-    }
+    return sortedAlerts.filter((a) => {
+      const t = a.timestampMs || new Date(a.timestamp).getTime() || 0;
+      return t >= cutoff;
+    });
   }, [sortedAlerts, selectedPeriodLocal]);
 
   // Count by alert type

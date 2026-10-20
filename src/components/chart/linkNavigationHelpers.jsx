@@ -1,6 +1,51 @@
 import { cleanDeviceKey } from "./drawHelpers";
 
 /**
+ * Checks whether a device belongs to the P-chart (network_type_id === 2 or network_name matches).
+ */
+export function isPChartDevice(dev) {
+  if (!dev) return false;
+  if (dev.network_type_id === 2 || dev.network_id === 2 || dev.type_id === 2) {
+    return true;
+  }
+  const netName = String(dev.network_name || dev.network || "").toLowerCase();
+  if (
+    netName.includes("anan-lekaman") ||
+    netName.includes("anan_lekaman") ||
+    netName.includes("p-network")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Finds a device by ID or name/hostname in topologyDevices or allDevices.
+ */
+export function findDeviceInLists(name, id, topologyDevices = [], allDevices = []) {
+  if (!name && id == null) return null;
+  const clean = cleanDeviceKey(name || "");
+  return (
+    (Array.isArray(topologyDevices)
+      ? topologyDevices.find(
+          (d) =>
+            (id != null && (String(d.id) === String(id) || d.id === id)) ||
+            (d.name && cleanDeviceKey(d.name) === clean) ||
+            (d.hostname && cleanDeviceKey(d.hostname) === clean)
+        )
+      : null) ||
+    (Array.isArray(allDevices)
+      ? allDevices.find(
+          (d) =>
+            (id != null && (String(d.id) === String(id) || d.id === id)) ||
+            (d.hostname && cleanDeviceKey(d.hostname) === clean) ||
+            (d.name && cleanDeviceKey(d.name) === clean)
+        )
+      : null)
+  );
+}
+
+/**
  * Returns a list of devices in a zone from topology devices and all devices.
  */
 export function getZoneDeviceList(zoneName, topologyDevices = [], allDevices = []) {
@@ -33,31 +78,8 @@ export function getLinkZoneInfo(link, topologyDevices = [], allDevices = []) {
   let srcZone = link.sourceZone;
   let tgtZone = link.targetZone;
 
-  const findDev = (name, id) => {
-    if (!name && id == null) return null;
-    const clean = cleanDeviceKey(name || "");
-    return (
-      (Array.isArray(topologyDevices)
-        ? topologyDevices.find(
-            (d) =>
-              (id != null && (String(d.id) === String(id) || d.id === id)) ||
-              (d.name && cleanDeviceKey(d.name) === clean) ||
-              (d.hostname && cleanDeviceKey(d.hostname) === clean)
-          )
-        : null) ||
-      (Array.isArray(allDevices)
-        ? allDevices.find(
-            (d) =>
-              (id != null && (String(d.id) === String(id) || d.id === id)) ||
-              (d.hostname && cleanDeviceKey(d.hostname) === clean) ||
-              (d.name && cleanDeviceKey(d.name) === clean)
-          )
-        : null)
-    );
-  };
-
-  const srcDev = findDev(srcName, link.coredevice_id || link.local_device_id);
-  const tgtDev = findDev(tgtName, link.remote_device_id || link.neighbor_coredevice_id);
+  const srcDev = findDeviceInLists(srcName, link.coredevice_id || link.local_device_id, topologyDevices, allDevices);
+  const tgtDev = findDeviceInLists(tgtName, link.remote_device_id || link.neighbor_coredevice_id, topologyDevices, allDevices);
 
   if (!srcZone || srcZone === "Unknown") {
     srcZone = srcDev?.coresite_name || srcDev?.zoneName || srcDev?.core_site_name || null;
@@ -72,9 +94,18 @@ export function getLinkZoneInfo(link, topologyDevices = [], allDevices = []) {
   let chosenZone = null;
   let chosenDevList = [];
 
+  const isTgtP = isPChartDevice(tgtDev);
+  const isSrcP = isPChartDevice(srcDev);
+
   if (srcZone && tgtZone && srcZone.toLowerCase() === tgtZone.toLowerCase()) {
     chosenZone = srcZone;
     chosenDevList = srcDevList.length > 0 ? srcDevList : tgtDevList;
+  } else if (isTgtP && !isSrcP && tgtZone && tgtZone !== "Unknown") {
+    chosenZone = tgtZone;
+    chosenDevList = tgtDevList;
+  } else if (isSrcP && !isTgtP && srcZone && srcZone !== "Unknown") {
+    chosenZone = srcZone;
+    chosenDevList = srcDevList;
   } else if (tgtDevList.length === 6) {
     chosenZone = tgtZone;
     chosenDevList = tgtDevList;
@@ -150,15 +181,41 @@ export function getLinkZoneInfo(link, topologyDevices = [], allDevices = []) {
 
 /**
  * Calculates navigation target URL and state for a link.
- * If visible on the main map: targets the base chart with highlight state.
- * If not visible on the main map: targets the specific zone with 4-device extended state.
+ * If visible on the main map: targets the base chart with highlight state and opens inspect popup.
+ * If not visible on the main map: targets the specific zone with 4-device extended state and opens inspect popup.
+ * Inspects remote device chart location to correctly route shared core site links to /p-chart when connecting to P devices.
  */
 export function getLinkNavigationTarget(link, topologyDevices = [], allDevices = []) {
   if (!link) return null;
 
-  const isP =
+  const srcName = link.sourceName || link.source || link.local_device_name || link.deviceName;
+  const tgtName = link.targetName || link.target || link.remote_device_name || link.remoteDeviceName;
+  const srcId = link.coredevice_id || link.local_device_id;
+  const tgtId = link.remote_device_id || link.neighbor_coredevice_id;
+
+  const srcDev = findDeviceInLists(srcName, srcId, topologyDevices, allDevices);
+  const tgtDev = findDeviceInLists(tgtName, tgtId, topologyDevices, allDevices);
+
+  // Check remote device's chart location as well as local device and link attributes
+  const isRemoteP =
+    isPChartDevice(tgtDev) ||
+    link.remote_network_type_id === 2 ||
+    link.rawLink?.remote_network_type_id === 2 ||
+    link.remote_device?.network_type_id === 2 ||
+    link.neighbor_coredevice?.network_type_id === 2;
+
+  const isSourceP =
+    isPChartDevice(srcDev) ||
+    link.local_network_type_id === 2 ||
+    link.rawLink?.local_network_type_id === 2 ||
+    link.coredevice?.network_type_id === 2;
+
+  const isP = Boolean(
     link.network_type_id === 2 ||
-    (link.rawLink && link.rawLink.network_type_id === 2);
+    (link.rawLink && link.rawLink.network_type_id === 2) ||
+    isRemoteP ||
+    isSourceP
+  );
   const basePath = isP ? "/p-chart" : "/l-chart";
 
   const linkId = link.id || link.link_id;
@@ -169,6 +226,9 @@ export function getLinkNavigationTarget(link, topologyDevices = [], allDevices =
       state: {
         focusedLinkId: linkId,
         downedLinkId: linkId,
+        inspectLinkId: linkId,
+        openInspectPopup: true,
+        selectedLink: link,
       },
     };
   }
@@ -182,6 +242,9 @@ export function getLinkNavigationTarget(link, topologyDevices = [], allDevices =
         targetNodeId: zoneInfo.relevantDevice,
         focusedNode: zoneInfo.relevantDevice,
         downedLinkId: linkId,
+        inspectLinkId: linkId,
+        openInspectPopup: true,
+        selectedLink: link,
       },
     };
   }
@@ -190,6 +253,9 @@ export function getLinkNavigationTarget(link, topologyDevices = [], allDevices =
     path: basePath,
     state: {
       downedLinkId: linkId,
+      inspectLinkId: linkId,
+      openInspectPopup: true,
+      selectedLink: link,
     },
   };
 }

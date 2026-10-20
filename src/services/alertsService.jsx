@@ -4,7 +4,10 @@ import {
   normalizeInterfaceName,
   getMissingPacketsCount,
 } from "../components/chart/drawHelpers";
-import { getLinkNavigationTarget } from "../components/chart/linkNavigationHelpers";
+import {
+  getLinkNavigationTarget,
+  isPChartDevice,
+} from "../components/chart/linkNavigationHelpers";
 
 export const PERIOD_DAYS_MAP = {
   "24h": 1,
@@ -12,6 +15,145 @@ export const PERIOD_DAYS_MAP = {
   "2w": 14,
   "1m": 30,
 };
+
+export function parseEventTimestamp(val) {
+  if (!val) return 0;
+  if (typeof val === "number") {
+    return val < 1e11 ? val * 1000 : val;
+  }
+  const s = String(val).trim();
+  if (!s) return 0;
+
+  if (/^\d+$/.test(s)) {
+    const num = Number(s);
+    return num < 1e11 ? num * 1000 : num;
+  }
+
+  let d = new Date(s);
+  if (!isNaN(d.getTime())) return d.getTime();
+
+  // Try ISO with space: "2026-10-20 02:41:10"
+  d = new Date(s.replace(" ", "T"));
+  if (!isNaN(d.getTime())) return d.getTime();
+
+  // "20/10/2026 02:41:10" or "20-10-2026 02:41:10"
+  const matchDmy = s.match(
+    /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/
+  );
+  if (matchDmy) {
+    const day = parseInt(matchDmy[1], 10);
+    const month = parseInt(matchDmy[2], 10) - 1;
+    const year = parseInt(matchDmy[3], 10);
+    const h = matchDmy[4] ? parseInt(matchDmy[4], 10) : 0;
+    const m = matchDmy[5] ? parseInt(matchDmy[5], 10) : 0;
+    const sec = matchDmy[6] ? parseInt(matchDmy[6], 10) : 0;
+    d = new Date(year, month, day, h, m, sec);
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+
+  // Time-only: "02:41:10" or "2:41:10" (assume today)
+  const matchTime = s.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+  if (matchTime) {
+    const now = new Date();
+    d = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      parseInt(matchTime[1], 10),
+      parseInt(matchTime[2], 10),
+      matchTime[3] ? parseInt(matchTime[3], 10) : 0
+    );
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+
+  return 0;
+}
+
+function normalizeEventType(ev) {
+  const raw = String(
+    ev.event_type ||
+      ev["event-type"] ||
+      ev.type ||
+      ev.eventType ||
+      ""
+  )
+    .toLowerCase()
+    .trim()
+    .replace(/[-\s]+/g, "_");
+
+  const newStatus = String(
+    ev.new_oper_status || ev.new_status || ev.status || ""
+  )
+    .toLowerCase()
+    .trim();
+  const newOspf = String(ev.new_ospf_state || "").toLowerCase().trim();
+
+  // Errors: link_down, ospf_drop
+  if (
+    raw === "link_down" ||
+    raw === "down" ||
+    (raw.includes("down") && !raw.includes("ospf")) ||
+    (newStatus === "down" && !raw.includes("ospf"))
+  ) {
+    return {
+      type: "error",
+      eventType: "link_down",
+      title: "Link Down",
+      severityScore: 10,
+    };
+  }
+
+  if (
+    raw === "ospf_drop" ||
+    raw === "ospf_down" ||
+    (raw.includes("ospf") &&
+      (raw.includes("drop") ||
+        raw.includes("down") ||
+        newOspf === "down" ||
+        newOspf === "2-way"))
+  ) {
+    return {
+      type: "error",
+      eventType: "ospf_drop",
+      title: "OSPF Drop",
+      severityScore: 8,
+    };
+  }
+
+  // Info: link_up, ospf_full
+  if (
+    raw === "link_up" ||
+    raw === "up" ||
+    raw === "link_recovery" ||
+    raw === "recovery" ||
+    raw === "restored" ||
+    (newStatus === "up" && !raw.includes("ospf"))
+  ) {
+    return {
+      type: "info",
+      eventType: "link_up",
+      title: "Link Up",
+      severityScore: 3,
+    };
+  }
+
+  if (
+    raw === "ospf_full" ||
+    raw === "ospf_up" ||
+    raw === "ospf_recovery" ||
+    (raw.includes("ospf") &&
+      (raw.includes("full") || raw.includes("recovery") || newOspf === "full"))
+  ) {
+    return {
+      type: "info",
+      eventType: "ospf_full",
+      title: "OSPF Full",
+      severityScore: 3,
+    };
+  }
+
+  return null;
+}
 
 function selectTopTwoDevices(devices) {
   if (!Array.isArray(devices) || devices.length <= 2) return devices || [];
@@ -40,31 +182,11 @@ function selectTopTwoDevices(devices) {
 }
 
 /**
- * Builds a canonical key for a pair of devices and interfaces to deduplicate bidirectional events.
- */
-function getEventDeduplicationKey(ev, canonicalLinkId) {
-  const d1 = cleanDeviceKey(ev.local_device_name || `dev-${ev.local_device_id || ""}`);
-  const d2 = cleanDeviceKey(ev.remote_device_name || `dev-${ev.remote_device_id || ""}`);
-  const devKey = [d1, d2].sort().join("<->");
-
-  const if1 = normalizeInterfaceName(ev.local_interface || "");
-  const if2 = normalizeInterfaceName(ev.remote_interface || "");
-  const ifKey = [if1, if2].sort().join("<->");
-
-  const eventType = String(ev.event_type || "").toLowerCase().trim().replace(/\s+/g, "_");
-  const timeMs = new Date(ev.created_at || ev.changed_at || 0).getTime();
-  // Group timestamps within a 15-second window so reports from both endpoints align
-  const timeBucket = Math.floor(timeMs / 15000);
-
-  const linkId = canonicalLinkId || ev.link_id;
-  return linkId ? `${linkId}::${eventType}::${timeBucket}` : `${devKey}::${ifKey}::${eventType}::${timeBucket}`;
-}
-
-/**
  * Fetches and aggregates alerts from api/core-topology-events and api/core-topology.
+ * Unifies bidirectional links and deduplicates mirror events reported by both endpoints.
  *
  * @param {string} period - '24h' | '1w' | '2w' | '1m'
- * @returns {Promise<Array>} Processed, deduplicated alerts array
+ * @returns {Promise<Array>} Processed, deduplicated alerts array (one alert per physical line)
  */
 export async function fetchAggregatedAlerts(period = "24h") {
   const days = PERIOD_DAYS_MAP[period] || 1;
@@ -92,7 +214,8 @@ export async function fetchAggregatedAlerts(period = "24h") {
 
   // Group devices by site to find top devices visible on the top-level map
   const devicesBySite = devices.reduce((acc, device) => {
-    const siteName = device.coresite_name || device.zoneName || device.core_site_name || "Unknown";
+    const siteName =
+      device.coresite_name || device.zoneName || device.core_site_name || "Unknown";
     if (!acc[siteName]) {
       acc[siteName] = [];
     }
@@ -100,21 +223,37 @@ export async function fetchAggregatedAlerts(period = "24h") {
     return acc;
   }, {});
 
-  const topDevicesPerSite = Object.values(devicesBySite).flatMap(
-    (deviceGroup) => selectTopTwoDevices(deviceGroup)
+  const topDevicesPerSite = Object.values(devicesBySite).flatMap((deviceGroup) =>
+    selectTopTwoDevices(deviceGroup)
   );
 
   const visibleDeviceNames = new Set(
     topDevicesPerSite.map((d) => cleanDeviceKey(d.hostname || d.name))
   );
 
-  const canonicalLinksMap = new Map();
+  // Maps to unify bidirectional links into single physical line representations
+  const canonicalLinksMap = new Map(); // signature -> canonicalLink
+  const linkIdToCanonicalMap = new Map(); // link_id -> canonicalLink
+  const endpointToCanonicalMap = new Map(); // "device::interface" -> canonicalLink
   const warningsList = [];
+
+  const deviceMapById = new Map();
+  devices.forEach((d) => {
+    if (d.id != null) {
+      deviceMapById.set(d.id, d);
+      deviceMapById.set(String(d.id), d);
+    }
+    const clean = cleanDeviceKey(d.hostname || d.name || "");
+    if (clean) {
+      deviceMapById.set(clean, d);
+    }
+  });
 
   devices.forEach((dev) => {
     const devLinks = dev.links || dev.interfaces || [];
     devLinks.forEach((rawLink) => {
-      const srcName = dev.hostname || dev.name || rawLink.sourceName || rawLink.local_device_name;
+      const srcName =
+        dev.hostname || dev.name || rawLink.sourceName || rawLink.local_device_name;
       const tgtName =
         rawLink.targetName ||
         rawLink.remote_device_name ||
@@ -127,62 +266,142 @@ export async function fetchAggregatedAlerts(period = "24h") {
       const d2 = cleanDeviceKey(tgtName);
       const devKey = [d1, d2].sort().join("<->");
 
-      const if1 = normalizeInterfaceName(rawLink.local_interface || rawLink.interface || "");
+      const if1 = normalizeInterfaceName(
+        rawLink.local_interface || rawLink.interface || ""
+      );
       const if2 = normalizeInterfaceName(rawLink.remote_interface || "");
       const ifKey = [if1, if2].sort().join("<->");
 
-      const linkKey = rawLink.id != null ? `link-${rawLink.id}` : `${devKey}::${ifKey}`;
+      const ep1 = if1 ? `${d1}::${if1}` : null;
+      const ep2 = if2 ? `${d2}::${if2}` : null;
+      const sig = `${devKey}::${ifKey}`;
 
-      if (!canonicalLinksMap.has(linkKey)) {
+      // Check if this link matches an existing reciprocal canonical link
+      let canonicalLink = null;
+      if (rawLink.id != null && linkIdToCanonicalMap.has(rawLink.id)) {
+        canonicalLink = linkIdToCanonicalMap.get(rawLink.id);
+      } else if (rawLink.id != null && linkIdToCanonicalMap.has(String(rawLink.id))) {
+        canonicalLink = linkIdToCanonicalMap.get(String(rawLink.id));
+      } else if (canonicalLinksMap.has(sig)) {
+        canonicalLink = canonicalLinksMap.get(sig);
+      } else if (ep1 && endpointToCanonicalMap.has(ep1)) {
+        canonicalLink = endpointToCanonicalMap.get(ep1);
+      } else if (ep2 && endpointToCanonicalMap.has(ep2)) {
+        canonicalLink = endpointToCanonicalMap.get(ep2);
+      }
+
+      if (canonicalLink) {
+        // Link already exists (reciprocal direction from neighbor device)
+        if (rawLink.id != null) {
+          if (!canonicalLink.allIds.includes(rawLink.id)) {
+            canonicalLink.allIds.push(rawLink.id);
+          }
+          linkIdToCanonicalMap.set(rawLink.id, canonicalLink);
+          linkIdToCanonicalMap.set(String(rawLink.id), canonicalLink);
+        }
+        if (if1 && !canonicalLink.allInterfaces.includes(if1)) {
+          canonicalLink.allInterfaces.push(if1);
+        }
+        if (if2 && !canonicalLink.allInterfaces.includes(if2)) {
+          canonicalLink.allInterfaces.push(if2);
+        }
+      } else {
+        // New canonical link representation for this physical line
         const isBothDevicesVisible = Boolean(
           visibleDeviceNames.has(d1) && visibleDeviceNames.has(d2)
         );
 
-        const enrichedLink = {
+        // Canonically sort endpoint names so display is always consistent
+        const isSorted = srcName.localeCompare(tgtName) <= 0;
+        const canSrc = isSorted ? srcName : tgtName;
+        const canTgt = isSorted ? tgtName : srcName;
+        const canIf1 = isSorted ? if1 : if2;
+        const canIf2 = isSorted ? if2 : if1;
+
+        const remoteDevice =
+          (rawLink.remote_device_id != null ? deviceMapById.get(rawLink.remote_device_id) : null) ||
+          (rawLink.remote_device_id != null ? deviceMapById.get(String(rawLink.remote_device_id)) : null) ||
+          deviceMapById.get(d2) ||
+          null;
+
+        const isP = Boolean(
+          rawLink.network_type_id === 2 ||
+          rawLink.remote_network_type_id === 2 ||
+          dev.network_type_id === 2 ||
+          isPChartDevice(dev) ||
+          (remoteDevice && (remoteDevice.network_type_id === 2 || isPChartDevice(remoteDevice)))
+        );
+
+        canonicalLink = {
           ...rawLink,
           id: rawLink.id ?? rawLink.link_id,
-          sourceName: srcName,
-          targetName: tgtName,
-          local_interface: rawLink.local_interface || rawLink.interface,
-          remote_interface: rawLink.remote_interface,
+          allIds: rawLink.id != null ? [rawLink.id] : [],
+          sourceName: canSrc,
+          targetName: canTgt,
+          local_interface: canIf1,
+          remote_interface: canIf2,
+          allInterfaces: [if1, if2].filter(Boolean),
           sourceZone: rawLink.sourceZone || dev.coresite_name || dev.zoneName,
           targetZone: rawLink.targetZone,
-          network_type_id: rawLink.network_type_id || dev.network_type_id || 1,
-          isVisibleOnMap: rawLink.isVisibleOnMap !== undefined ? Boolean(rawLink.isVisibleOnMap) : isBothDevicesVisible,
+          network_type_id: isP ? 2 : (rawLink.network_type_id || dev.network_type_id || 1),
+          remote_network_type_id: remoteDevice?.network_type_id,
+          isVisibleOnMap:
+            rawLink.isVisibleOnMap !== undefined
+              ? Boolean(rawLink.isVisibleOnMap)
+              : isBothDevicesVisible,
           rawLink,
         };
-        canonicalLinksMap.set(linkKey, enrichedLink);
 
-        // Check for Warning: 10 ping packets lost (same condition as 'issue' in side drawer)
-        const missingPackets = getMissingPacketsCount(enrichedLink);
-        if (missingPackets >= 10) {
-          const timestamp =
-            enrichedLink.last_ping_at ||
-            enrichedLink.rawLink?.last_ping_at ||
-            enrichedLink.statusDate ||
-            new Date().toISOString();
-
-          const navTarget = getLinkNavigationTarget(enrichedLink, devices, devices);
-
-          warningsList.push({
-            id: `warning-loss-${enrichedLink.id || linkKey}`,
-            type: "warning",
-            eventType: "packet_loss",
-            message: `High Packet Loss (${missingPackets} lost): ${srcName} ⟷ ${tgtName}`,
-            networkLine: `${srcName} ⟷ ${tgtName}`,
-            source: srcName,
-            timestamp,
-            severityScore: Math.min(10, Math.max(5, Math.floor(missingPackets / 10))),
-            details: `Ping test on ${srcName} (${enrichedLink.local_interface || "N/A"}) ⟷ ${tgtName} (${enrichedLink.remote_interface || "N/A"}) detected ${missingPackets} lost packets.`,
-            link: enrichedLink,
-            navigationTarget: navTarget,
-          });
+        canonicalLinksMap.set(sig, canonicalLink);
+        if (rawLink.id != null) {
+          linkIdToCanonicalMap.set(rawLink.id, canonicalLink);
+          linkIdToCanonicalMap.set(String(rawLink.id), canonicalLink);
         }
+        if (ep1) endpointToCanonicalMap.set(ep1, canonicalLink);
+        if (ep2) endpointToCanonicalMap.set(ep2, canonicalLink);
       }
     });
   });
 
-  // 3. Process and deduplicate events from api/core-topology-events
+  // Check warnings for packet loss once per canonical link
+  canonicalLinksMap.forEach((canonicalLink) => {
+    const missingPackets = getMissingPacketsCount(canonicalLink);
+    if (missingPackets >= 10) {
+      const rawTime =
+        canonicalLink.last_ping_at ||
+        canonicalLink.rawLink?.last_ping_at ||
+        canonicalLink.statusDate ||
+        new Date().toISOString();
+
+      const timestampMs = parseEventTimestamp(rawTime) || Date.now();
+      const timestampIso = new Date(timestampMs).toISOString();
+
+      const navTarget = getLinkNavigationTarget(canonicalLink, devices, devices);
+      const linkKey = `canonical-link-${canonicalLink.id}`;
+
+      warningsList.push({
+        id: `warning-loss-${canonicalLink.id}`,
+        canonicalKey: linkKey,
+        type: "warning",
+        eventType: "packet_loss",
+        message: `High Packet Loss (${missingPackets} lost): ${canonicalLink.sourceName} ⟷ ${canonicalLink.targetName}`,
+        networkLine: `${canonicalLink.sourceName} ⟷ ${canonicalLink.targetName}`,
+        source: canonicalLink.sourceName,
+        timestamp: timestampIso,
+        timestampMs,
+        severityScore: Math.min(10, Math.max(5, Math.floor(missingPackets / 10))),
+        details: `Ping test on ${canonicalLink.sourceName} (${
+          canonicalLink.local_interface || "N/A"
+        }) ⟷ ${canonicalLink.targetName} (${
+          canonicalLink.remote_interface || "N/A"
+        }) detected ${missingPackets} lost packets.`,
+        link: canonicalLink,
+        navigationTarget: navTarget,
+      });
+    }
+  });
+
+  // 3. Process events from api/core-topology-events
   const rawEvents = Array.isArray(eventsRes)
     ? eventsRes
     : Array.isArray(eventsRes?.events)
@@ -193,106 +412,198 @@ export async function fetchAggregatedAlerts(period = "24h") {
     ? eventsRes.data
     : [];
 
-  const seenEventKeys = new Set();
-  const eventAlerts = [];
+  // Group events by canonical physical line
+  const eventsByLine = new Map();
 
   rawEvents.forEach((ev) => {
-    const evType = String(ev.event_type || "").toLowerCase().trim().replace(/\s+/g, "_");
-
-    let alertType = null;
-    let title = "";
-    let severityScore = 5;
-
-    // Errors: link down, ospf drop
-    if (evType === "link_down") {
-      alertType = "error";
-      title = "Link Down";
-      severityScore = 10;
-    } else if (evType === "ospf_drop") {
-      alertType = "error";
-      title = "OSPF Drop";
-      severityScore = 8;
-    }
-    // Info: link up, ospf full
-    else if (evType === "link_up") {
-      alertType = "info";
-      title = "Link Up";
-      severityScore = 3;
-    } else if (evType === "ospf_full" || evType === "ospf_up") {
-      alertType = "info";
-      title = "OSPF Full";
-      severityScore = 3;
-    } else {
-      // Skip unrecognized event types
-      return;
-    }
+    const norm = normalizeEventType(ev);
+    if (!norm) return;
 
     const d1 = ev.local_device_name || `Device-${ev.local_device_id || "A"}`;
     const d2 = ev.remote_device_name || `Device-${ev.remote_device_id || "B"}`;
     const if1 = ev.local_interface || "";
     const if2 = ev.remote_interface || "";
 
-    // Deduplicate between Device 1 and Device 2
-    const dedupKey = getEventDeduplicationKey(ev, ev.link_id);
-    if (seenEventKeys.has(dedupKey)) {
-      return;
-    }
-    seenEventKeys.add(dedupKey);
+    const cleanD1 = cleanDeviceKey(d1);
+    const cleanD2 = cleanDeviceKey(d2);
+    const devKey = [cleanD1, cleanD2].sort().join("<->");
 
-    // Find matching link from topology if available
+    const normIf1 = normalizeInterfaceName(if1);
+    const normIf2 = normalizeInterfaceName(if2);
+    const ifKey = [normIf1, normIf2].sort().join("<->");
+
+    const ep1 = normIf1 ? `${cleanD1}::${normIf1}` : null;
+    const ep2 = normIf2 ? `${cleanD2}::${normIf2}` : null;
+
+    // Match unified canonical link
     let matchedLink = null;
-    if (ev.link_id != null && canonicalLinksMap.has(`link-${ev.link_id}`)) {
-      matchedLink = canonicalLinksMap.get(`link-${ev.link_id}`);
+    if (ev.link_id != null && linkIdToCanonicalMap.has(ev.link_id)) {
+      matchedLink = linkIdToCanonicalMap.get(ev.link_id);
+    } else if (ev.link_id != null && linkIdToCanonicalMap.has(String(ev.link_id))) {
+      matchedLink = linkIdToCanonicalMap.get(String(ev.link_id));
+    } else if (canonicalLinksMap.has(`${devKey}::${ifKey}`)) {
+      matchedLink = canonicalLinksMap.get(`${devKey}::${ifKey}`);
+    } else if (ep1 && endpointToCanonicalMap.has(ep1)) {
+      matchedLink = endpointToCanonicalMap.get(ep1);
+    } else if (ep2 && endpointToCanonicalMap.has(ep2)) {
+      matchedLink = endpointToCanonicalMap.get(ep2);
     } else {
-      const devKey = [cleanDeviceKey(d1), cleanDeviceKey(d2)].sort().join("<->");
-      const ifKey = [normalizeInterfaceName(if1), normalizeInterfaceName(if2)].sort().join("<->");
       matchedLink =
-        canonicalLinksMap.get(`${devKey}::${ifKey}`) ||
         Array.from(canonicalLinksMap.values()).find((l) => {
           const lD1 = cleanDeviceKey(l.sourceName);
           const lD2 = cleanDeviceKey(l.targetName);
-          return (lD1 === cleanDeviceKey(d1) && lD2 === cleanDeviceKey(d2)) ||
-                 (lD1 === cleanDeviceKey(d2) && lD2 === cleanDeviceKey(d1));
+          return (
+            (lD1 === cleanD1 && lD2 === cleanD2) ||
+            (lD1 === cleanD2 && lD2 === cleanD1)
+          );
         }) || null;
     }
 
-    const timestamp = ev.created_at || ev.changed_at || new Date().toISOString();
-    const eventId = `event-${ev.id || `${cleanDeviceKey(d1)}-${cleanDeviceKey(d2)}-${evType}-${new Date(timestamp).getTime()}`}`;
+    // Canonical key representing the physical line between both devices
+    const canonicalKey = matchedLink
+      ? `canonical-link-${matchedLink.id}`
+      : `${devKey}::${ifKey && ifKey !== "<->" ? ifKey : "line"}`;
+
+    const rawTime =
+      ev.created_at ||
+      ev.changed_at ||
+      ev.timestamp ||
+      ev.event_time ||
+      ev.time ||
+      ev.date ||
+      ev.status_changed_at;
+
+    const timestampMs = parseEventTimestamp(rawTime) || Date.now();
+    const timestampIso = new Date(timestampMs).toISOString();
+
+    const isSorted = d1.localeCompare(d2) <= 0;
+    const canSrc = matchedLink ? matchedLink.sourceName : (isSorted ? d1 : d2);
+    const canTgt = matchedLink ? matchedLink.targetName : (isSorted ? d2 : d1);
+    const canIf1 = matchedLink ? matchedLink.local_interface : (isSorted ? if1 : if2);
+    const canIf2 = matchedLink ? matchedLink.remote_interface : (isSorted ? if2 : if1);
+
+    const localDevObj =
+      (ev.local_device_id != null ? deviceMapById.get(ev.local_device_id) : null) ||
+      (ev.local_device_id != null ? deviceMapById.get(String(ev.local_device_id)) : null) ||
+      deviceMapById.get(cleanD1) ||
+      null;
+
+    const remoteDevObj =
+      (ev.remote_device_id != null ? deviceMapById.get(ev.remote_device_id) : null) ||
+      (ev.remote_device_id != null ? deviceMapById.get(String(ev.remote_device_id)) : null) ||
+      deviceMapById.get(cleanD2) ||
+      null;
+
+    const isEvP = Boolean(
+      ev.network_type_id === 2 ||
+      (matchedLink && matchedLink.network_type_id === 2) ||
+      isPChartDevice(remoteDevObj) ||
+      isPChartDevice(localDevObj)
+    );
 
     const linkPayload = matchedLink || {
       id: ev.link_id,
       link_id: ev.link_id,
-      sourceName: d1,
-      targetName: d2,
-      local_interface: if1,
-      remote_interface: if2,
-      network_type_id: 1,
+      sourceName: canSrc,
+      targetName: canTgt,
+      local_interface: canIf1,
+      remote_interface: canIf2,
+      network_type_id: isEvP ? 2 : 1,
+      remote_network_type_id: remoteDevObj?.network_type_id,
+      local_device_id: ev.local_device_id,
+      remote_device_id: ev.remote_device_id,
       isVisibleOnMap: Boolean(
-        visibleDeviceNames.has(cleanDeviceKey(d1)) && visibleDeviceNames.has(cleanDeviceKey(d2))
+        visibleDeviceNames.has(cleanD1) && visibleDeviceNames.has(cleanD2)
       ),
     };
 
-    const navTarget = getLinkNavigationTarget(linkPayload, devices, devices);
-
-    eventAlerts.push({
-      id: eventId,
-      type: alertType,
-      eventType: evType,
-      message: `${title}: ${d1} ⟷ ${d2}`,
-      networkLine: `${d1} ⟷ ${d2}`,
-      source: d1,
-      timestamp,
-      severityScore,
-      details: `Event type: ${evType}. Local interface: ${if1 || "N/A"}, Remote interface: ${if2 || "N/A"}. Reported by ${d1}.`,
+    const parsedEvent = {
+      ev,
+      canonicalKey,
+      eventType: norm.eventType,
+      type: norm.type,
+      title: norm.title,
+      severityScore: norm.severityScore,
+      srcName: canSrc,
+      tgtName: canTgt,
+      reportingDevice: d1,
+      if1,
+      if2,
+      timestamp: timestampIso,
+      timestampMs,
       link: linkPayload,
+    };
+
+    if (!eventsByLine.has(canonicalKey)) {
+      eventsByLine.set(canonicalKey, []);
+    }
+
+    const lineList = eventsByLine.get(canonicalKey);
+
+    // Deduplicate mirror reports between Device 1 and Device 2 within 60s
+    const isMirror = lineList.some(
+      (existing) =>
+        existing.eventType === norm.eventType &&
+        Math.abs(existing.timestampMs - timestampMs) <= 60000
+    );
+
+    if (!isMirror) {
+      lineList.push(parsedEvent);
+    }
+  });
+
+  // 4. For each canonical line, produce EXACTLY ONE alert representing its LATEST status
+  const lineAlerts = [];
+
+  eventsByLine.forEach((events, canonicalKey) => {
+    // Sort all events for this line newest first
+    events.sort((a, b) => b.timestampMs - a.timestampMs);
+
+    const latest = events[0];
+    const previous = events[1];
+
+    let historyDetails = `Reported: ${latest.srcName} ⟷ ${latest.tgtName}.`;
+
+    if (previous) {
+      historyDetails += ` Previous state: ${previous.title} at ${new Date(
+        previous.timestampMs
+      ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}.`;
+    }
+
+    const navTarget = getLinkNavigationTarget(latest.link, devices, devices);
+    const eventId = `alert-${canonicalKey}-${latest.eventType}-${latest.timestampMs}`;
+
+    lineAlerts.push({
+      id: eventId,
+      canonicalKey,
+      type: latest.type,
+      eventType: latest.eventType,
+      message: `${latest.title}: ${latest.srcName} ⟷ ${latest.tgtName}`,
+      networkLine: `${latest.srcName} ⟷ ${latest.tgtName}`,
+      source: latest.srcName,
+      timestamp: latest.timestamp,
+      timestampMs: latest.timestampMs,
+      severityScore: latest.severityScore,
+      details: historyDetails,
+      link: latest.link,
       navigationTarget: navTarget,
+      history: events.map((e) => ({
+        title: e.title,
+        eventType: e.eventType,
+        timestamp: e.timestamp,
+        timestampMs: e.timestampMs,
+      })),
     });
   });
 
-  // 4. Combine all alerts and sort newest first
-  const allAlerts = [...eventAlerts, ...warningsList].sort((a, b) => {
-    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-  });
+  // 5. Combine line event alerts and warning alerts
+  // If a line already has an event alert (e.g. down or up), event alert takes precedence over ping packet loss
+  const seenKeys = new Set(lineAlerts.map((a) => a.canonicalKey));
+  const activeWarnings = warningsList.filter((w) => !seenKeys.has(w.canonicalKey));
+
+  const allAlerts = [...lineAlerts, ...activeWarnings].sort(
+    (a, b) => (b.timestampMs || 0) - (a.timestampMs || 0)
+  );
 
   return allAlerts;
 }

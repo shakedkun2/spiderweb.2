@@ -1,5 +1,5 @@
-import React, { useCallback, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import NetworkVisualizer from "../../components/chart/NetworkVisualizer";
 import LinkDetailPopup from "../../components/shared/LinkDetailPopup";
@@ -50,6 +50,7 @@ function selectTopTwoDevices(devices) {
 
 const NetworkVisualizerWrapper = ({ theme }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
   // Poll core topology immediately on mount and then every 5 seconds
   React.useEffect(() => {
@@ -642,7 +643,7 @@ const NetworkVisualizerWrapper = ({ theme }) => {
     }
   };
 
-  const handleLinkClick = (linkData) => {
+  const handleLinkClick = useCallback((linkData) => {
     if (!linkData) return;
     const payload = createLinkPopupPayload(linkData) || linkData;
     const src =
@@ -659,7 +660,55 @@ const NetworkVisualizerWrapper = ({ theme }) => {
       type: "link",
       title: `${src || "Device A"} ⟷ ${tgt || "Device B"}`,
     });
-  };
+  }, []);
+
+  // Automatically open inspect popup when redirected from an alert ("See Line")
+  const inspectHandledKeyRef = useRef(null);
+  useEffect(() => {
+    const targetLinkId =
+      location.state?.inspectLinkId ||
+      location.state?.downedLinkId ||
+      location.state?.focusedLinkId;
+    const shouldOpen =
+      location.state?.openInspectPopup || Boolean(location.state?.inspectLinkId);
+
+    if (!shouldOpen || !targetLinkId) return;
+
+    const navKey = `${location.key || "init"}_${targetLinkId}`;
+    if (inspectHandledKeyRef.current === navKey) return;
+
+    const foundLink =
+      graphData.drawerLinks.find(
+        (l) =>
+          l.id === targetLinkId ||
+          String(l.id) === String(targetLinkId) ||
+          (l.allIds &&
+            (l.allIds.includes(targetLinkId) ||
+              l.allIds.includes(Number(targetLinkId)) ||
+              l.allIds.includes(String(targetLinkId))))
+      ) ||
+      graphData.links.find(
+        (l) =>
+          l.id === targetLinkId ||
+          String(l.id) === String(targetLinkId) ||
+          (l.allIds &&
+            (l.allIds.includes(targetLinkId) ||
+              l.allIds.includes(Number(targetLinkId)) ||
+              l.allIds.includes(String(targetLinkId))))
+      ) ||
+      location.state?.selectedLink;
+
+    if (foundLink) {
+      inspectHandledKeyRef.current = navKey;
+      handleLinkClick(foundLink);
+    }
+  }, [
+    location.key,
+    location.state,
+    graphData.drawerLinks,
+    graphData.links,
+    handleLinkClick,
+  ]);
 
   // Keep open popup updated in real-time when polling updates graph data
   React.useEffect(() => {

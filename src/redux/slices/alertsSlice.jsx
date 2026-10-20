@@ -104,6 +104,18 @@ const alertsSlice = createSlice({
 
         state.seenAlertIds = Array.from(seenIdsSet);
 
+        // Clear stale error toasts for lines that have returned to service
+        const resolvedLines = new Set(
+          alerts
+            .filter((a) => a.type === "info" && a.canonicalKey)
+            .map((a) => a.canonicalKey)
+        );
+        if (resolvedLines.size > 0) {
+          state.sidebarToasts = state.sidebarToasts.filter(
+            (t) => !(t.canonicalKey && resolvedLines.has(t.canonicalKey) && t.type === "error")
+          );
+        }
+
         // Queue sidebar toasts for new alerts (or initial errors/warnings on first load)
         if (!state.hasInitialLoaded) {
           state.hasInitialLoaded = true;
@@ -114,11 +126,13 @@ const alertsSlice = createSlice({
             .map((a) => ({
               id: `toast-${a.id}-${Date.now()}`,
               alertId: a.id,
+              canonicalKey: a.canonicalKey,
               type: a.type,
               message: a.message,
               networkLine: a.networkLine,
               source: a.source,
               timestamp: a.timestamp,
+              timestampMs: a.timestampMs,
               createdAt: Date.now(),
               link: a.link,
               navigationTarget: a.navigationTarget,
@@ -128,11 +142,13 @@ const alertsSlice = createSlice({
           const incomingToasts = newAlerts.map((a) => ({
             id: `toast-${a.id}-${Date.now()}`,
             alertId: a.id,
+            canonicalKey: a.canonicalKey,
             type: a.type,
             message: a.message,
             networkLine: a.networkLine,
             source: a.source,
             timestamp: a.timestamp,
+            timestampMs: a.timestampMs,
             createdAt: Date.now(),
             link: a.link,
             navigationTarget: a.navigationTarget,

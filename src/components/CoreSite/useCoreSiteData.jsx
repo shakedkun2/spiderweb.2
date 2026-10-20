@@ -845,7 +845,7 @@ export function useCoreSiteData(chartType) {
     openPopup(siteDetailPayload);
   };
 
-  const handleLinkClick = (linkData) => {
+  const handleLinkClick = useCallback((linkData) => {
     if (!linkData) return;
     const raw = linkData.rawLink || linkData;
     const srcName =
@@ -911,7 +911,74 @@ export function useCoreSiteData(chartType) {
         isCoreTopology: true,
       },
     });
-  };
+  }, [zoneId]);
+
+  // Automatically open inspect popup when redirected from an alert ("See Line")
+  const inspectHandledKeyRef = useRef(null);
+  useEffect(() => {
+    const targetLinkId =
+      location.state?.inspectLinkId ||
+      location.state?.downedLinkId ||
+      location.state?.focusedLinkId;
+    const shouldOpen =
+      location.state?.openInspectPopup || Boolean(location.state?.inspectLinkId);
+
+    if (!shouldOpen || !targetLinkId) return;
+
+    const navKey = `${location.key || "init"}_${targetLinkId}`;
+    if (inspectHandledKeyRef.current === navKey) return;
+
+    const foundLink =
+      (links &&
+        links.find(
+          (l) =>
+            l.id === targetLinkId ||
+            String(l.id) === String(targetLinkId) ||
+            l.rawLink?.id === targetLinkId ||
+            String(l.rawLink?.id) === String(targetLinkId) ||
+            (l.allIds &&
+              (l.allIds.includes(targetLinkId) ||
+                l.allIds.includes(Number(targetLinkId)) ||
+                l.allIds.includes(String(targetLinkId))))
+        )) ||
+      (mappedLinksForChart &&
+        mappedLinksForChart.find(
+          (l) =>
+            l.id === targetLinkId ||
+            String(l.id) === String(targetLinkId) ||
+            l.rawLink?.id === targetLinkId ||
+            String(l.rawLink?.id) === String(targetLinkId) ||
+            (l.allIds &&
+              (l.allIds.includes(targetLinkId) ||
+                l.allIds.includes(Number(targetLinkId)) ||
+                l.allIds.includes(String(targetLinkId))))
+        )) ||
+      (coreDeviceLinks &&
+        coreDeviceLinks.find(
+          (l) =>
+            l.id === targetLinkId ||
+            String(l.id) === String(targetLinkId) ||
+            l.rawLink?.id === targetLinkId ||
+            String(l.rawLink?.id) === String(targetLinkId) ||
+            (l.allIds &&
+              (l.allIds.includes(targetLinkId) ||
+                l.allIds.includes(Number(targetLinkId)) ||
+                l.allIds.includes(String(targetLinkId))))
+        )) ||
+      location.state?.selectedLink;
+
+    if (foundLink) {
+      inspectHandledKeyRef.current = navKey;
+      handleLinkClick(foundLink);
+    }
+  }, [
+    location.key,
+    location.state,
+    links,
+    mappedLinksForChart,
+    coreDeviceLinks,
+    handleLinkClick,
+  ]);
 
   return {
     zoneId,

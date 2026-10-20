@@ -43,8 +43,8 @@ function NavItem({ label, icon, collapsed, active }) {
   );
 }
 
-// Individual Toast Notification Component with auto-dismiss
-function SidebarToastItem({ toast, collapsed, onDismiss, onNavigate }) {
+// Individual Toast Notification Component with auto-dismiss and Link redirect
+function SidebarToastItem({ toast, collapsed, onDismiss }) {
   useEffect(() => {
     // Auto dismiss after 8 seconds
     const timer = setTimeout(() => {
@@ -55,7 +55,7 @@ function SidebarToastItem({ toast, collapsed, onDismiss, onNavigate }) {
 
   const typeConfig = {
     error: {
-      bg: "bg-red-50 dark:bg-red-950/70 border-red-300 dark:border-red-800",
+      bg: "bg-red-50 dark:bg-red-950/70 border-red-300 dark:border-red-800 hover:border-red-500",
       text: "text-red-900 dark:text-red-100",
       title: "Error",
       badge: "bg-red-600 text-white",
@@ -63,7 +63,7 @@ function SidebarToastItem({ toast, collapsed, onDismiss, onNavigate }) {
       iconColor: "text-red-500",
     },
     warning: {
-      bg: "bg-amber-50 dark:bg-amber-950/70 border-amber-300 dark:border-amber-800",
+      bg: "bg-amber-50 dark:bg-amber-950/70 border-amber-300 dark:border-amber-800 hover:border-amber-500",
       text: "text-amber-900 dark:text-amber-100",
       title: "Warning",
       badge: "bg-amber-500 text-white",
@@ -71,7 +71,7 @@ function SidebarToastItem({ toast, collapsed, onDismiss, onNavigate }) {
       iconColor: "text-amber-500",
     },
     info: {
-      bg: "bg-blue-50 dark:bg-blue-950/70 border-blue-300 dark:border-blue-800",
+      bg: "bg-blue-50 dark:bg-blue-950/70 border-blue-300 dark:border-blue-800 hover:border-blue-500",
       text: "text-blue-900 dark:text-blue-100",
       title: "Info",
       badge: "bg-blue-600 text-white",
@@ -84,10 +84,11 @@ function SidebarToastItem({ toast, collapsed, onDismiss, onNavigate }) {
   const { Icon } = config;
 
   return (
-    <div
-      onClick={onNavigate}
+    <Link
+      to="/notifications"
+      onClick={() => onDismiss(toast.id)}
       title={`${config.title}: ${toast.message} - Click to view alerts`}
-      className={`group relative flex items-start gap-2 p-2.5 rounded-lg border shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] ${config.bg} ${config.text}`}
+      className={`group relative flex items-start gap-2 p-2.5 rounded-lg border shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] block no-underline text-left ${config.bg} ${config.text}`}
     >
       <Icon className={`shrink-0 mt-0.5 ${config.iconColor}`} size={18} />
 
@@ -124,24 +125,25 @@ function SidebarToastItem({ toast, collapsed, onDismiss, onNavigate }) {
       )}
 
       <button
+        type="button"
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           onDismiss(toast.id);
         }}
         title="Dismiss alert"
         aria-label="Dismiss alert"
-        className="absolute top-1.5 right-1.5 p-0.5 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 transition"
+        className="absolute top-1.5 right-1.5 p-0.5 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 transition z-10"
       >
         <MdClose size={14} />
       </button>
-    </div>
+    </Link>
   );
 }
 
 // Main Sidebar component
 export function Sidebar({ currentPage, collapsed, setCollapsed }) {
   const dispatch = useDispatch();
-  const navigate = useNavigate();
   const sidebarToasts = useSelector(selectSidebarToasts);
 
   const navItems = [
@@ -161,17 +163,13 @@ export function Sidebar({ currentPage, collapsed, setCollapsed }) {
         const pA = typePriority[a.type] || 4;
         const pB = typePriority[b.type] || 4;
         if (pA !== pB) return pA - pB;
-        return (b.createdAt || 0) - (a.createdAt || 0);
+        return (b.timestampMs || b.createdAt || 0) - (a.timestampMs || a.createdAt || 0);
       })
       .slice(0, 3);
   }, [sidebarToasts]);
 
   const handleDismissToast = (id) => {
     dispatch(dismissToast(id));
-  };
-
-  const handleNavigateToAlerts = () => {
-    navigate("/notifications");
   };
 
   return (
@@ -228,7 +226,6 @@ export function Sidebar({ currentPage, collapsed, setCollapsed }) {
               toast={toast}
               collapsed={collapsed}
               onDismiss={handleDismissToast}
-              onNavigate={handleNavigateToAlerts}
             />
           ))}
         </div>
