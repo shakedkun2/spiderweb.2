@@ -622,9 +622,9 @@ export function DashboardPage({
       <Route path="/favorites" element={<FavoritesPage theme={theme} />} />
       <Route path="/all_interfaces" element={<AllInterfacesPage theme={theme} />} />
 
-      {/* THE FIX: The chart routes are restructured to separate layouts for each sub-route. */}
+      {/* Libot (replaces l-chart) */}
       <Route
-        path="/l-chart/*"
+        path="/Libot/*"
         element={
           <Routes>
             {/* The index route gets the non-scrolling, fixed-height layout */}
@@ -661,9 +661,13 @@ export function DashboardPage({
           </Routes>
         }
       />
+      {/* Lowercase and legacy redirects for Libot */}
+      <Route path="/libot/*" element={<Navigate to="/Libot" replace />} />
+      <Route path="/l-chart/*" element={<Navigate to="/Libot" replace />} />
 
+      {/* Pikudim (replaces p-chart) */}
       <Route
-        path="/p-chart/*"
+        path="/Pikudim/*"
         element={
           <Routes>
             {/* The index route gets its own non-scrolling, fixed-height layout */}
@@ -700,6 +704,9 @@ export function DashboardPage({
           </Routes>
         }
       />
+      {/* Lowercase and legacy redirects for Pikudim */}
+      <Route path="/pikudim/*" element={<Navigate to="/Pikudim" replace />} />
+      <Route path="/p-chart/*" element={<Navigate to="/Pikudim" replace />} />
 
       {/* Default routes to redirect to the favorites tab */}
       <Route path="/" element={<Navigate to="/favorites" replace />} />

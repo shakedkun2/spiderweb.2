@@ -640,7 +640,7 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
   // All event handlers
   const handleZoneClick = useCallback(
     (zoneId) => {
-      navigate(`/p-chart/zone/${zoneId}`);
+      navigate(`/Pikudim/zone/${zoneId}`);
     },
     [navigate]
   );
@@ -650,7 +650,7 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
       const zone = nodeData?.zone || nodeData?.zoneName || "Zone";
       const hostname = nodeData?.hostname || nodeData?.id || nodeData?.name;
       if (hostname) {
-        navigate(`/p-chart/zone/${zone}/node/${hostname}`);
+        navigate(`/Pikudim/zone/${zone}/node/${hostname}`);
       }
     },
     [navigate]
@@ -759,7 +759,7 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
   const isDataEmpty = !isLoading && !hasError && graphData.nodes.length === 0;
 
   if (isLoading) {
-    return <LoadingSpinner text="Building P-Chart..." />;
+    return <LoadingSpinner text="Building Pikudim..." />;
   }
 
   if (hasError) {
@@ -773,7 +773,7 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
           No Data Available
         </h3>
         <p className="mt-2 text-gray-500 dark:text-gray-400">
-          There is no network data available to build the P-Chart.
+          There is no network data available to build Pikudim.
         </p>
       </div>
     );

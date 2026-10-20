@@ -22,7 +22,8 @@ import {
 const navLinks = {
   Dashboard: "/",
   "Admin Panel": "/admin",
-  Notifications: "/notifications",
+  Alerts: "/alerts",
+  Notifications: "/alerts",
 };
 
 // NavItem component
@@ -43,7 +44,7 @@ function NavItem({ label, icon, collapsed, active }) {
   );
 }
 
-// Individual Toast Notification Component with auto-dismiss and Link redirect
+// Individual Toast Alert Component with auto-dismiss and Link redirect
 function SidebarToastItem({ toast, collapsed, onDismiss }) {
   useEffect(() => {
     // Auto dismiss after 8 seconds
@@ -85,7 +86,7 @@ function SidebarToastItem({ toast, collapsed, onDismiss }) {
 
   return (
     <Link
-      to="/notifications"
+      to="/alerts"
       onClick={() => onDismiss(toast.id)}
       title={`${config.title}: ${toast.message} - Click to view alerts`}
       className={`group relative flex items-start gap-2 p-2.5 rounded-lg border shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] block no-underline text-left ${config.bg} ${config.text}`}
@@ -149,7 +150,7 @@ export function Sidebar({ currentPage, collapsed, setCollapsed }) {
   const navItems = [
     { label: "Dashboard", icon: <MdDashboard size={20} /> },
     { label: "Admin Panel", icon: <MdAdminPanelSettings size={20} /> },
-    { label: "Notifications", icon: <MdNotifications size={20} /> },
+    { label: "Alerts", icon: <MdNotifications size={20} /> },
   ];
 
   // Filter and prioritize toasts:
@@ -202,7 +203,7 @@ export function Sidebar({ currentPage, collapsed, setCollapsed }) {
         {navItems.map((item) => {
           const isActive =
             currentPage === item.label ||
-            (item.label === "Notifications" &&
+            ((item.label === "Alerts" || item.label === "Notifications") &&
               (currentPage === "Alerts" || currentPage === "Notifications"));
 
           return (
@@ -217,7 +218,7 @@ export function Sidebar({ currentPage, collapsed, setCollapsed }) {
         })}
       </nav>
 
-      {/* Bottom-left Toast Notifications Section */}
+      {/* Bottom-left Toast Alerts Section */}
       {visibleToasts.length > 0 && (
         <div className="p-2 border-t dark:border-gray-800 space-y-2 shrink-0 max-h-64 overflow-y-auto">
           {visibleToasts.map((toast) => (

@@ -22,8 +22,8 @@ export function useDashboardLogic({ isAppFullscreen, isSidebarCollapsed }) {
    * @returns {string} The corresponding tab value.
    */
   const getTabValueFromPath = (path) => {
-    if (path.startsWith("/l-chart")) return "l_network";
-    if (path.startsWith("/p-chart")) return "p_network";
+    if (path.startsWith("/Libot") || path.startsWith("/libot") || path.startsWith("/l-chart")) return "l_network";
+    if (path.startsWith("/Pikudim") || path.startsWith("/pikudim") || path.startsWith("/p-chart")) return "p_network";
     if (path.startsWith("/all_interfaces")) return "all_interfaces";
     if (path.startsWith("/favorites")) return "favorites";
     return "favorites"; // Default to 'favorites' if no match is found
@@ -53,10 +53,10 @@ export function useDashboardLogic({ isAppFullscreen, isSidebarCollapsed }) {
     let path;
     switch (value) {
       case "l_network":
-        path = "/l-chart";
+        path = "/Libot";
         break;
       case "p_network":
-        path = "/p-chart";
+        path = "/Pikudim";
         break;
       case "all_interfaces":
         path = "/all_interfaces"; // Correctly maps to the all_interfaces path

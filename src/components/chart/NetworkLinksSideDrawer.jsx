@@ -671,11 +671,13 @@ export default function NetworkLinksSideDrawer({
       if (!zoneInfo || !zoneInfo.zone) return;
 
       const isP =
+        location.pathname.startsWith("/Pikudim") ||
+        location.pathname.startsWith("/pikudim") ||
         location.pathname.startsWith("/p-chart") ||
-        (chartName && (chartName.toLowerCase().includes("p") || chartName.includes("5"))) ||
+        (chartName && (chartName.toLowerCase().includes("p") || chartName.includes("5") || chartName.toLowerCase().includes("pikud"))) ||
         link.network_type_id === 2;
 
-      const basePath = isP ? "/p-chart" : "/l-chart";
+      const basePath = isP ? "/Pikudim" : "/Libot";
       const url = `${basePath}/zone/${encodeURIComponent(zoneInfo.zone)}?showExtended=${zoneInfo.shouldShowExtended}`;
 
       navigate(url, {

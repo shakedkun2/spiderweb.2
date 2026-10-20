@@ -61,8 +61,8 @@ const AlertModal = ({ alert, onClose, topologyDevices, allDevices }) => {
       navigate(navTarget.path, { state });
       onClose();
     } else {
-      // Default to /l-chart if target can't be resolved
-      navigate("/l-chart");
+      // Default to /Libot if target can't be resolved
+      navigate("/Libot");
       onClose();
     }
   };

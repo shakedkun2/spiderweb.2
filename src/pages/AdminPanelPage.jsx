@@ -125,7 +125,7 @@ function ConfirmationModal({ isOpen, title, description, confirmText, confirmVar
   );
 }
 
-// Reusable Toast Notification Banner
+// Reusable Toast Alert Banner
 function Toast({ toast, onClose }) {
   if (!toast?.show) return null;
 

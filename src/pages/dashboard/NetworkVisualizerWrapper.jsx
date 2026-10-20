@@ -632,14 +632,14 @@ const NetworkVisualizerWrapper = ({ theme }) => {
   const handleZoneClick = (zone) => {
     // The 'zone' parameter here is simply the string ID passed from renderCoreDevices
     const zoneId = typeof zone === 'object' ? (zone.id || zone.name || encodeURIComponent(zone)) : zone;
-    navigate(`/l-chart/zone/${zoneId}`);
+    navigate(`/Libot/zone/${zoneId}`);
   };
 
   const handleNodeClick = (node) => {
     const zone = node.zone || node.zoneName || node.core_pikudim_site_id || "Zone";
     const hostname = node.hostname || node.name || node.id;
     if (hostname) {
-      navigate(`/l-chart/zone/${zone}/node/${hostname}`);
+      navigate(`/Libot/zone/${zone}/node/${hostname}`);
     }
   };
 
@@ -746,7 +746,7 @@ const NetworkVisualizerWrapper = ({ theme }) => {
   const isDataEmpty = !isLoading && !hasError && graphData.nodes.length === 0;
 
   if (isLoading) {
-    return <LoadingSpinner text="Building L-Chart..." />;
+    return <LoadingSpinner text="Building Libot..." />;
   }
 
   if (hasError) {
@@ -760,7 +760,7 @@ const NetworkVisualizerWrapper = ({ theme }) => {
           No Data Available
         </h3>
         <p className="mt-2 text-gray-500 dark:text-gray-400">
-          There is no network data available to build the L-Chart.
+          There is no network data available to build Libot.
         </p>
       </div>
     );

@@ -31,7 +31,7 @@ export default function CoreSiteView({
 }) {
   const navigate = useNavigate();
   const isDark = theme === "dark";
-  const backPath = chartType === "P" ? "/p-chart" : "/l-chart";
+  const backPath = chartType === "P" ? "/Pikudim" : "/Libot";
   const backLabel = chartType === "P" ? "Back to Pikudim Map" : "Back to Libot Map";
   const svgRef = useRef(null);
   const siteRefs = useRef([]);

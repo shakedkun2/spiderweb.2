@@ -92,7 +92,7 @@ function AppLayout() {
     const path = location.pathname;
 
     if (path.startsWith("/admin")) return "Admin Panel";
-    if (path.startsWith("/notifications")) return "Notifications";
+    if (path.startsWith("/alerts") || path.startsWith("/notifications")) return "Alerts";
 
     return "Dashboard";
   }, [location.pathname]);
@@ -159,6 +159,10 @@ function AppLayout() {
   // --- Pages that have their own non-scrollable layout ---
   const isNonScrollablePage =
     location.pathname.startsWith("/all_interfaces") ||
+    location.pathname.startsWith("/Libot") ||
+    location.pathname.startsWith("/libot") ||
+    location.pathname.startsWith("/Pikudim") ||
+    location.pathname.startsWith("/pikudim") ||
     location.pathname.startsWith("/l-chart") ||
     location.pathname.startsWith("/p-chart");
 
@@ -274,8 +278,12 @@ function AppLayout() {
                 ALERTS
             ================================================= */}
             <Route
-              path="/notifications"
+              path="/alerts"
               element={<AlertsPage />}
+            />
+            <Route
+              path="/notifications"
+              element={<Navigate to="/alerts" replace />}
             />
 
             {/* Redirect unneeded pages */}

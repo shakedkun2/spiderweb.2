@@ -216,7 +216,7 @@ export function getLinkNavigationTarget(link, topologyDevices = [], allDevices =
     isRemoteP ||
     isSourceP
   );
-  const basePath = isP ? "/p-chart" : "/l-chart";
+  const basePath = isP ? "/Pikudim" : "/Libot";
 
   const linkId = link.id || link.link_id;
 

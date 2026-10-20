@@ -254,12 +254,12 @@ const LinkTable = ({
   const isDark = theme === "dark";
 
   const handleDeviceButtonClick = (device) => {
-    const basePath = chartType === "P" ? "/p-chart" : "/l-chart";
+    const basePath = chartType === "P" ? "/Pikudim" : "/Libot";
     navigate(`${basePath}/zone/${device.zoneName || coreSiteName}/node/${device.hostname}`);
   };
 
   const handleBackClick = () => {
-    const basePath = chartType === "P" ? "/p-chart" : "/l-chart";
+    const basePath = chartType === "P" ? "/Pikudim" : "/Libot";
     navigate(`${basePath}/zone/${coreSiteName}`);
   };
 
