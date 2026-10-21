@@ -269,23 +269,25 @@ export function Sidebar({ currentPage, collapsed, setCollapsed }) {
 
       {/* Bottom-left Toast Alerts Section */}
       {visibleToasts.length > 0 && (
-        <div className="p-2 border-t dark:border-gray-800 space-y-2 shrink-0 max-h-64 overflow-y-auto">
+        <div className="border-t dark:border-gray-800 shrink-0 flex flex-col max-h-72 overflow-hidden">
           {!collapsed && (
-            <div className="flex items-center justify-between px-1 mb-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <div className="flex items-center justify-between px-3 pt-2 pb-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider shrink-0 select-none bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800/60">
               <span>Alerts</span>
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                 {visibleToasts.length}
               </span>
             </div>
           )}
-          {visibleToasts.map((toast) => (
-            <SidebarToastItem
-              key={toast.id}
-              toast={toast}
-              collapsed={collapsed}
-              onDismiss={handleDismissToast}
-            />
-          ))}
+          <div className="p-2 space-y-2 overflow-y-auto flex-1">
+            {visibleToasts.map((toast) => (
+              <SidebarToastItem
+                key={toast.id}
+                toast={toast}
+                collapsed={collapsed}
+                onDismiss={handleDismissToast}
+              />
+            ))}
+          </div>
         </div>
       )}
 

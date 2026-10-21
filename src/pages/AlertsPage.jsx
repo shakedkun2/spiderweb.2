@@ -121,30 +121,6 @@ const AlertModal = ({ alert, onClose, topologyDevices, allDevices }) => {
               {new Date(alert.timestamp).toLocaleString()}
             </span>
           </p>
-          <p>
-            <strong className="text-gray-700 dark:text-gray-300">
-              Network Line:
-            </strong>
-            <span className="text-gray-600 dark:text-gray-400 ml-1">
-              {alert.networkLine}
-            </span>
-          </p>
-          <p>
-            <strong className="text-gray-700 dark:text-gray-300">
-              Source:
-            </strong>
-            <span className="text-gray-600 dark:text-gray-400 ml-1">
-              {alert.source}
-            </span>
-          </p>
-          <p>
-            <strong className="text-gray-700 dark:text-gray-300">
-              Severity Score:
-            </strong>
-            <span className="text-gray-600 dark:text-gray-400 ml-1">
-              {alert.severityScore}/10
-            </span>
-          </p>
           <div className="pt-2">
             <strong className="text-gray-700 dark:text-gray-300 block mb-1">
               Details:
@@ -153,12 +129,6 @@ const AlertModal = ({ alert, onClose, topologyDevices, allDevices }) => {
               {alert.details}
             </p>
           </div>
-          <p>
-            <strong className="text-gray-700 dark:text-gray-300">ID:</strong>
-            <span className="text-xs text-gray-500 dark:text-gray-500 ml-1">
-              {alert.id}
-            </span>
-          </p>
           {alert.history && alert.history.length > 1 && (
             <div className="pt-2 border-t border-gray-100 dark:border-gray-700/60 mt-3">
               <strong className="text-gray-700 dark:text-gray-300 block mb-2 text-xs uppercase tracking-wider">

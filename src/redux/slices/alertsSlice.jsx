@@ -37,6 +37,15 @@ const loadIgnoreAlertsFromStorage = () => {
   }
 };
 
+const loadDismissedAlertsFromStorage = () => {
+  try {
+    const raw = localStorage.getItem("spiderweb_dismissed_alerts");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
 const alertsSlice = createSlice({
   name: "alerts",
   initialState: {
@@ -48,6 +57,7 @@ const alertsSlice = createSlice({
     seenAlertIds: [],
     hasInitialLoaded: false,
     ignoreAlerts: loadIgnoreAlertsFromStorage(),
+    dismissedAlertIds: loadDismissedAlertsFromStorage(),
   },
   reducers: {
     setSelectedPeriod: (state, action) => {
@@ -55,6 +65,27 @@ const alertsSlice = createSlice({
     },
     dismissToast: (state, action) => {
       const toastId = action.payload;
+      const toast = state.sidebarToasts.find(
+        (t) => t.id === toastId || t.alertId === toastId
+      );
+      const targetAlertId =
+        toast?.alertId ||
+        (typeof toastId === "string" && !toastId.startsWith("toast-")
+          ? toastId
+          : null);
+
+      if (targetAlertId && !state.dismissedAlertIds.includes(targetAlertId)) {
+        state.dismissedAlertIds.push(targetAlertId);
+        try {
+          localStorage.setItem(
+            "spiderweb_dismissed_alerts",
+            JSON.stringify(state.dismissedAlertIds.slice(-200))
+          );
+        } catch {
+          // Ignore localStorage error
+        }
+      }
+
       state.sidebarToasts = state.sidebarToasts.filter(
         (t) => t.id !== toastId && t.alertId !== toastId
       );
@@ -83,9 +114,15 @@ const alertsSlice = createSlice({
       if (state.ignoreAlerts) {
         state.sidebarToasts = [];
       } else {
-        // Populate toasts with current active errors/warnings up to 3 when unignoring
+        // Populate toasts with current active errors/warnings up to 3 when unignoring,
+        // excluding alerts that the user already closed/dismissed
+        const dismissedSet = new Set(state.dismissedAlertIds || []);
         const activeToasts = state.items
-          .filter((a) => a.type === "error" || a.type === "warning")
+          .filter(
+            (a) =>
+              (a.type === "error" || a.type === "warning") &&
+              !dismissedSet.has(a.id)
+          )
           .slice(0, 3)
           .map((a) => ({
             id: `toast-${a.id}-${Date.now()}`,
@@ -107,6 +144,7 @@ const alertsSlice = createSlice({
     addToast: (state, action) => {
       const toast = action.payload;
       if (state.ignoreAlerts) return;
+      if (toast?.alertId && state.dismissedAlertIds?.includes(toast.alertId)) return;
       if (toast && !state.sidebarToasts.some((t) => t.id === toast.id)) {
         state.sidebarToasts.push({
           ...toast,
@@ -174,12 +212,18 @@ const alertsSlice = createSlice({
           return;
         }
 
+        const dismissedSet = new Set(state.dismissedAlertIds || []);
+
         // Queue sidebar toasts for new alerts (or initial errors/warnings on first load)
         if (!state.hasInitialLoaded) {
           state.hasInitialLoaded = true;
-          // On first load, queue initial error/warning alerts up to 3
+          // On first load, queue initial error/warning alerts up to 3 that are not dismissed
           const initialToasts = alerts
-            .filter((a) => a.type === "error" || a.type === "warning")
+            .filter(
+              (a) =>
+                (a.type === "error" || a.type === "warning") &&
+                !dismissedSet.has(a.id)
+            )
             .slice(0, 3)
             .map((a) => ({
               id: `toast-${a.id}-${Date.now()}`,
@@ -197,20 +241,22 @@ const alertsSlice = createSlice({
             }));
           state.sidebarToasts.push(...initialToasts);
         } else if (newAlerts.length > 0) {
-          const incomingToasts = newAlerts.map((a) => ({
-            id: `toast-${a.id}-${Date.now()}`,
-            alertId: a.id,
-            canonicalKey: a.canonicalKey,
-            type: a.type,
-            message: a.message,
-            networkLine: a.networkLine,
-            source: a.source,
-            timestamp: a.timestamp,
-            timestampMs: a.timestampMs,
-            createdAt: Date.now(),
-            link: a.link,
-            navigationTarget: a.navigationTarget,
-          }));
+          const incomingToasts = newAlerts
+            .filter((a) => !dismissedSet.has(a.id))
+            .map((a) => ({
+              id: `toast-${a.id}-${Date.now()}`,
+              alertId: a.id,
+              canonicalKey: a.canonicalKey,
+              type: a.type,
+              message: a.message,
+              networkLine: a.networkLine,
+              source: a.source,
+              timestamp: a.timestamp,
+              timestampMs: a.timestampMs,
+              createdAt: Date.now(),
+              link: a.link,
+              navigationTarget: a.navigationTarget,
+            }));
           state.sidebarToasts.push(...incomingToasts);
           // Keep toasts list bounded to prevent infinite growth
           if (state.sidebarToasts.length > 20) {
@@ -225,6 +271,17 @@ const alertsSlice = createSlice({
       // Deleting an alert
       .addCase(deleteAlert.fulfilled, (state, action) => {
         const alertIdToRemove = action.payload;
+        if (alertIdToRemove && !state.dismissedAlertIds.includes(alertIdToRemove)) {
+          state.dismissedAlertIds.push(alertIdToRemove);
+          try {
+            localStorage.setItem(
+              "spiderweb_dismissed_alerts",
+              JSON.stringify(state.dismissedAlertIds.slice(-200))
+            );
+          } catch {
+            // Ignore localStorage error
+          }
+        }
         state.items = state.items.filter(
           (alert) => alert.id !== alertIdToRemove
         );
