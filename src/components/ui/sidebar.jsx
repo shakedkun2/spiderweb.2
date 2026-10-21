@@ -1,5 +1,5 @@
-import React, { useMemo, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
   MdDashboard,
@@ -13,6 +13,7 @@ import {
   MdClose,
 } from "react-icons/md";
 import { DarkModeToggle } from "../ui/dark-mode-toggle";
+import { IgnoreAlertsButton } from "../ui/ignore-alerts-button";
 import {
   selectSidebarToasts,
   dismissToast,
@@ -44,87 +45,135 @@ function NavItem({ label, icon, collapsed, active }) {
   );
 }
 
-// Individual Toast Alert Component with auto-dismiss and Link redirect
+// Individual Toast Alert Component with Link redirect (stays until dismissed or clicked)
+// Redesigned with inspiration from AlertsPage core AlertCard / AlertIcon design
 function SidebarToastItem({ toast, collapsed, onDismiss }) {
-  useEffect(() => {
-    // Auto dismiss after 8 seconds
-    const timer = setTimeout(() => {
-      onDismiss(toast.id);
-    }, 8000);
-    return () => clearTimeout(timer);
-  }, [toast.id, onDismiss]);
-
   const typeConfig = {
     error: {
-      bg: "bg-red-50 dark:bg-red-950/70 border-red-300 dark:border-red-800 hover:border-red-500",
-      text: "text-red-900 dark:text-red-100",
-      title: "Error",
-      badge: "bg-red-600 text-white",
-      Icon: MdErrorOutline,
+      borderAccent: "border-l-red-500",
+      badgeBg: "bg-red-500 text-white",
       iconColor: "text-red-500",
+      dotColor: "bg-red-500",
+      title: "Error",
+      Icon: MdErrorOutline,
     },
     warning: {
-      bg: "bg-amber-50 dark:bg-amber-950/70 border-amber-300 dark:border-amber-800 hover:border-amber-500",
-      text: "text-amber-900 dark:text-amber-100",
+      borderAccent: "border-l-yellow-500",
+      badgeBg: "bg-yellow-500 text-white",
+      iconColor: "text-yellow-500 dark:text-yellow-400",
+      dotColor: "bg-yellow-500",
       title: "Warning",
-      badge: "bg-amber-500 text-white",
       Icon: MdWarningAmber,
-      iconColor: "text-amber-500",
     },
     info: {
-      bg: "bg-blue-50 dark:bg-blue-950/70 border-blue-300 dark:border-blue-800 hover:border-blue-500",
-      text: "text-blue-900 dark:text-blue-100",
-      title: "Info",
-      badge: "bg-blue-600 text-white",
-      Icon: MdInfoOutline,
+      borderAccent: "border-l-blue-500",
+      badgeBg: "bg-blue-500 text-white",
       iconColor: "text-blue-500",
+      dotColor: "bg-blue-500",
+      title: "Info",
+      Icon: MdInfoOutline,
     },
   };
 
   const config = typeConfig[toast.type] || typeConfig.info;
   const { Icon } = config;
+  const lineOrSource = toast.networkLine || toast.source;
+
+  const formattedTime = toast.timestamp
+    ? new Date(toast.timestamp).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  if (collapsed) {
+    return (
+      <div
+        className={`group relative flex items-center justify-center p-2 rounded-lg bg-white dark:bg-gray-800 border-l-4 ${config.borderAccent} border border-gray-200/90 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 hover:-translate-y-0.5 transition-all duration-200`}
+      >
+        <Link
+          to="/alerts"
+          onClick={() => onDismiss(toast.id)}
+          title={`${config.title}: ${toast.message}${
+            lineOrSource ? ` (${lineOrSource})` : ""
+          } - Click to view alerts`}
+          className="flex items-center justify-center w-full py-1 no-underline"
+        >
+          <div className="relative flex items-center justify-center">
+            <Icon className={`shrink-0 ${config.iconColor}`} size={20} />
+            <span
+              className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${config.dotColor} ring-2 ring-white dark:ring-gray-800`}
+            />
+          </div>
+        </Link>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDismiss(toast.id);
+          }}
+          title="Dismiss alert"
+          aria-label="Dismiss alert"
+          className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 hover:text-gray-800 dark:hover:text-gray-100 shadow-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
+        >
+          <MdClose size={12} />
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <Link
-      to="/alerts"
-      onClick={() => onDismiss(toast.id)}
-      title={`${config.title}: ${toast.message} - Click to view alerts`}
-      className={`group relative flex items-start gap-2 p-2.5 rounded-lg border shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] block no-underline text-left ${config.bg} ${config.text}`}
+    <div
+      className={`group relative rounded-lg bg-white dark:bg-gray-800 border-l-4 ${config.borderAccent} border border-gray-200/90 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 hover:-translate-y-0.5 transition-all duration-200 overflow-hidden`}
     >
-      <Icon className={`shrink-0 mt-0.5 ${config.iconColor}`} size={18} />
-
-      {!collapsed ? (
-        <div className="flex-1 min-w-0 pr-4">
-          <div className="flex items-center gap-1.5 mb-0.5">
+      <Link
+        to="/alerts"
+        onClick={() => onDismiss(toast.id)}
+        title="Click to view alerts"
+        className="block p-2.5 no-underline text-left"
+      >
+        {/* Top bar: Badge, Timestamp, and space for Close button */}
+        <div className="flex items-center justify-between gap-1 mb-1.5 pr-6">
+          <div className="flex items-center gap-1.5 min-w-0">
             <span
-              className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded leading-none ${config.badge}`}
+              className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded shadow-xs ${config.badgeBg}`}
             >
               {config.title}
             </span>
-            {toast.timestamp && (
-              <span className="text-[10px] opacity-60 truncate">
-                {new Date(toast.timestamp).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+            {formattedTime && (
+              <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate">
+                {formattedTime}
               </span>
             )}
           </div>
-          <p className="text-xs font-medium leading-snug line-clamp-2">
+        </div>
+
+        {/* Message row with Icon matching AlertsPage AlertIcon */}
+        <div className="flex items-start gap-2">
+          <Icon className={`shrink-0 mt-0.5 ${config.iconColor}`} size={16} />
+          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 line-clamp-2 leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
             {toast.message}
           </p>
-          {toast.networkLine && (
-            <p className="text-[10px] opacity-75 truncate mt-0.5">
-              {toast.networkLine}
-            </p>
-          )}
         </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center w-full py-0.5">
-          <span className="sr-only">{config.title}</span>
-        </div>
-      )}
 
+        {/* Footer metadata matching AlertsPage AlertCard */}
+        {lineOrSource && (
+          <div className="mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-700/60 text-[10px] text-gray-600 dark:text-gray-300 flex items-center justify-between gap-1">
+            <span className="truncate">
+              <strong className="text-gray-700 dark:text-gray-200 font-semibold">
+                {toast.networkLine ? "Line:" : "Source:"}
+              </strong>{" "}
+              {lineOrSource}
+            </span>
+            <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              View &rarr;
+            </span>
+          </div>
+        )}
+      </Link>
+
+      {/* Dismiss Button */}
       <button
         type="button"
         onClick={(e) => {
@@ -134,11 +183,11 @@ function SidebarToastItem({ toast, collapsed, onDismiss }) {
         }}
         title="Dismiss alert"
         aria-label="Dismiss alert"
-        className="absolute top-1.5 right-1.5 p-0.5 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 transition z-10"
+        className="absolute top-2 right-2 p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition z-10"
       >
-        <MdClose size={14} />
+        <MdClose size={13} />
       </button>
-    </Link>
+    </div>
   );
 }
 
@@ -221,6 +270,14 @@ export function Sidebar({ currentPage, collapsed, setCollapsed }) {
       {/* Bottom-left Toast Alerts Section */}
       {visibleToasts.length > 0 && (
         <div className="p-2 border-t dark:border-gray-800 space-y-2 shrink-0 max-h-64 overflow-y-auto">
+          {!collapsed && (
+            <div className="flex items-center justify-between px-1 mb-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <span>Alerts</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                {visibleToasts.length}
+              </span>
+            </div>
+          )}
           {visibleToasts.map((toast) => (
             <SidebarToastItem
               key={toast.id}
@@ -233,7 +290,8 @@ export function Sidebar({ currentPage, collapsed, setCollapsed }) {
       )}
 
       {/* Footer Navigation */}
-      <div className="p-2 border-t dark:border-gray-700 shrink-0">
+      <div className="p-2 border-t dark:border-gray-700 shrink-0 flex flex-col gap-1">
+        <IgnoreAlertsButton collapsed={collapsed} />
         <DarkModeToggle collapsed={collapsed} />
       </div>
     </div>

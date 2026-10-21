@@ -29,6 +29,14 @@ export const favoriteAlert = createAsyncThunk(
   async (alertId) => alertId
 );
 
+const loadIgnoreAlertsFromStorage = () => {
+  try {
+    return localStorage.getItem("spiderweb_ignore_alerts") === "true";
+  } catch {
+    return false;
+  }
+};
+
 const alertsSlice = createSlice({
   name: "alerts",
   initialState: {
@@ -39,6 +47,7 @@ const alertsSlice = createSlice({
     sidebarToasts: [],
     seenAlertIds: [],
     hasInitialLoaded: false,
+    ignoreAlerts: loadIgnoreAlertsFromStorage(),
   },
   reducers: {
     setSelectedPeriod: (state, action) => {
@@ -53,8 +62,51 @@ const alertsSlice = createSlice({
     clearToasts: (state) => {
       state.sidebarToasts = [];
     },
+    setIgnoreAlerts: (state, action) => {
+      state.ignoreAlerts = Boolean(action.payload);
+      try {
+        localStorage.setItem("spiderweb_ignore_alerts", String(state.ignoreAlerts));
+      } catch {
+        // Ignore localStorage error
+      }
+      if (state.ignoreAlerts) {
+        state.sidebarToasts = [];
+      }
+    },
+    toggleIgnoreAlerts: (state) => {
+      state.ignoreAlerts = !state.ignoreAlerts;
+      try {
+        localStorage.setItem("spiderweb_ignore_alerts", String(state.ignoreAlerts));
+      } catch {
+        // Ignore localStorage error
+      }
+      if (state.ignoreAlerts) {
+        state.sidebarToasts = [];
+      } else {
+        // Populate toasts with current active errors/warnings up to 3 when unignoring
+        const activeToasts = state.items
+          .filter((a) => a.type === "error" || a.type === "warning")
+          .slice(0, 3)
+          .map((a) => ({
+            id: `toast-${a.id}-${Date.now()}`,
+            alertId: a.id,
+            canonicalKey: a.canonicalKey,
+            type: a.type,
+            message: a.message,
+            networkLine: a.networkLine,
+            source: a.source,
+            timestamp: a.timestamp,
+            timestampMs: a.timestampMs,
+            createdAt: Date.now(),
+            link: a.link,
+            navigationTarget: a.navigationTarget,
+          }));
+        state.sidebarToasts = activeToasts;
+      }
+    },
     addToast: (state, action) => {
       const toast = action.payload;
+      if (state.ignoreAlerts) return;
       if (toast && !state.sidebarToasts.some((t) => t.id === toast.id)) {
         state.sidebarToasts.push({
           ...toast,
@@ -114,6 +166,12 @@ const alertsSlice = createSlice({
           state.sidebarToasts = state.sidebarToasts.filter(
             (t) => !(t.canonicalKey && resolvedLines.has(t.canonicalKey) && t.type === "error")
           );
+        }
+
+        // If ignoreAlerts is active, suppress toasts on initial load and incoming alerts
+        if (state.ignoreAlerts) {
+          state.hasInitialLoaded = true;
+          return;
         }
 
         // Queue sidebar toasts for new alerts (or initial errors/warnings on first load)
@@ -190,6 +248,8 @@ export const {
   dismissToast,
   clearToasts,
   addToast,
+  setIgnoreAlerts,
+  toggleIgnoreAlerts,
 } = alertsSlice.actions;
 
 export const selectAllAlerts = (state) => state.alerts.items;
@@ -197,5 +257,6 @@ export const selectAlertsStatus = (state) => state.alerts.status;
 export const selectAlertsError = (state) => state.alerts.error;
 export const selectSelectedPeriod = (state) => state.alerts.selectedPeriod;
 export const selectSidebarToasts = (state) => state.alerts.sidebarToasts;
+export const selectIgnoreAlerts = (state) => state.alerts.ignoreAlerts;
 
 export default alertsSlice.reducer;
