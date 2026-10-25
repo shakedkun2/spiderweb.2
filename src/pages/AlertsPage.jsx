@@ -279,7 +279,7 @@ const TypeFilterButton = ({ typeInfo, count, isActive, onClick }) => {
 };
 
 export function AlertsPage() {
-  const dispatch = useDispatch();
+  const dispatch = /** @type {any} */ (useDispatch());
   const allAlerts = useSelector(selectAllAlerts);
   const status = useSelector(selectAlertsStatus);
   const reduxSelectedPeriod = useSelector(selectSelectedPeriod);

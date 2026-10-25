@@ -30,7 +30,7 @@ const selectCoreDataStatus = createSelector(
 );
 
 export function AppInitializer({ children }) {
-  const dispatch = useDispatch();
+  const dispatch = /** @type {any} */ (useDispatch());
   const dataStatus = useSelector(selectCoreDataStatus);
   const allCoreSites = useSelector(selectAllPikudim);
 
@@ -61,7 +61,7 @@ export function AppInitializer({ children }) {
     // Start polling only when the core application data has successfully loaded.
     if (isSuccessful) {
       // Fetch alerts immediately on initial load
-      dispatch(fetchAlerts());
+      dispatch(fetchAlerts({}));
 
       // Fetch traffic for all core sites immediately on load
       const siteIds = allCoreSites && allCoreSites.length > 0
