@@ -2,16 +2,17 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { fetchAggregatedAlerts } from "../../services/alertsService";
 
 // --- ASYNC THUNKS for Alerts ---
+/** @type {any} */
 export const fetchAlerts = createAsyncThunk(
   "alerts/fetchAlerts",
-  async (args = {}, { getState, rejectWithValue }) => {
+  async (/** @type {any} */ args = {}, { getState, rejectWithValue }) => {
     try {
-      const state = getState();
+      const state = /** @type {any} */ (getState());
       const period = args.period || state.alerts.selectedPeriod || "1w";
       const alerts = await fetchAggregatedAlerts(period);
       return { alerts, period, silent: Boolean(args.silent) };
     } catch (error) {
-      return rejectWithValue(error.message || "Failed to fetch alerts");
+      return rejectWithValue(/** @type {any} */ (error).message || "Failed to fetch alerts");
     }
   }
 );
@@ -19,14 +20,16 @@ export const fetchAlerts = createAsyncThunk(
 // Backward-compatible alias
 export const fetchAllAlerts = fetchAlerts;
 
+/** @type {any} */
 export const deleteAlert = createAsyncThunk(
   "alerts/delete",
-  async (alertId) => alertId
+  async (/** @type {any} */ alertId) => alertId
 );
 
+/** @type {any} */
 export const favoriteAlert = createAsyncThunk(
   "alerts/favorite",
-  async (alertId) => alertId
+  async (/** @type {any} */ alertId) => alertId
 );
 
 const loadIgnoreAlertsFromStorage = () => {
