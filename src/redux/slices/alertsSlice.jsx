@@ -12,7 +12,9 @@ export const fetchAlerts = createAsyncThunk(
       const alerts = await fetchAggregatedAlerts(period);
       return { alerts, period, silent: Boolean(args.silent) };
     } catch (error) {
-      return rejectWithValue(/** @type {any} */ (error).message || "Failed to fetch alerts");
+      return rejectWithValue(
+        /** @type {any} */ (error).message || "Failed to fetch alerts",
+      );
     }
   }
 );
