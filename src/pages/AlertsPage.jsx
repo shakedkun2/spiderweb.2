@@ -289,7 +289,7 @@ export function AlertsPage() {
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPeriodLocal, setSelectedPeriodLocal] = useState(
-    reduxSelectedPeriod || "24h"
+    reduxSelectedPeriod || "1w"
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTypes, setSelectedTypes] = useState(initialTypeState);
@@ -355,7 +355,7 @@ export function AlertsPage() {
       "2w": 14 * 24,
       "1m": 30 * 24,
     };
-    const hours = periodHoursMap[selectedPeriodLocal] || 24;
+    const hours = periodHoursMap[selectedPeriodLocal] || 7 * 24;
     const cutoff = now - hours * 60 * 60 * 1000;
 
     return sortedAlerts.filter((a) => {

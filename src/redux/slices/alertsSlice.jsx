@@ -7,7 +7,7 @@ export const fetchAlerts = createAsyncThunk(
   async (args = {}, { getState, rejectWithValue }) => {
     try {
       const state = getState();
-      const period = args.period || state.alerts.selectedPeriod || "24h";
+      const period = args.period || state.alerts.selectedPeriod || "1w";
       const alerts = await fetchAggregatedAlerts(period);
       return { alerts, period, silent: Boolean(args.silent) };
     } catch (error) {
@@ -52,7 +52,7 @@ const alertsSlice = createSlice({
     items: [],
     status: "idle", // 'idle' | 'loading' | 'succeeded' | 'failed'
     error: null,
-    selectedPeriod: "24h", // '24h' | '1w' | '2w' | '1m'
+    selectedPeriod: "1w", // '24h' | '1w' | '2w' | '1m'
     sidebarToasts: [],
     seenAlertIds: [],
     hasInitialLoaded: false,

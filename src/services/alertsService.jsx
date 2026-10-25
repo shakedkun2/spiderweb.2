@@ -188,8 +188,8 @@ function selectTopTwoDevices(devices) {
  * @param {string} period - '24h' | '1w' | '2w' | '1m'
  * @returns {Promise<Array>} Processed, deduplicated alerts array (one alert per physical line)
  */
-export async function fetchAggregatedAlerts(period = "24h") {
-  const days = PERIOD_DAYS_MAP[period] || 1;
+export async function fetchAggregatedAlerts(period = "1w") {
+  const days = PERIOD_DAYS_MAP[period] || 7;
 
   // 1. Fetch both endpoints in parallel
   const [eventsRes, topologyRes] = await Promise.all([
