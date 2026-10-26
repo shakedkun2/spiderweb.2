@@ -116,6 +116,11 @@ const LinkDetailTabs = ({
     delete itemData.ospf_state_duration_seconds;
     delete itemData.ospfUpTimeSeconds;
     delete itemData.ospfStateDurationSeconds;
+    delete itemData.is_pim_up;
+    delete itemData.mpls_enabled;
+    delete itemData.is_mpls_up;
+    delete itemData.pim_uptime_seconds;
+    delete itemData.mpls_uptime_seconds;
   }
 
   const isDark = theme === "dark";

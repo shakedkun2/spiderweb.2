@@ -512,6 +512,18 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
           if (existing.last_ospf_down_at == null && link.last_ospf_down_at != null) {
             existing.last_ospf_down_at = link.last_ospf_down_at;
           }
+          if (existing.pim_state == null && (link.pim_state != null || link.rawLink?.pim_state != null)) {
+            existing.pim_state = link.pim_state ?? link.rawLink?.pim_state;
+          }
+          if (existing.pim_uptime == null && (link.pim_uptime != null || link.rawLink?.pim_uptime != null)) {
+            existing.pim_uptime = link.pim_uptime ?? link.rawLink?.pim_uptime;
+          }
+          if (existing.mpls_ldp_state == null && (link.mpls_ldp_state != null || link.rawLink?.mpls_ldp_state != null)) {
+            existing.mpls_ldp_state = link.mpls_ldp_state ?? link.rawLink?.mpls_ldp_state;
+          }
+          if (existing.mpls_uptime == null && (link.mpls_uptime != null || link.rawLink?.mpls_uptime != null)) {
+            existing.mpls_uptime = link.mpls_uptime ?? link.rawLink?.mpls_uptime;
+          }
 
           const currentInBps = link.in_bps ?? link.input_rate ?? link.inBps ?? link.bytes_in_rate ?? link.bytesIn ?? null;
           const currentOutBps = link.out_bps ?? link.output_rate ?? link.outBps ?? link.bytes_out_rate ?? link.bytesOut ?? null;
@@ -612,6 +624,10 @@ const NetworkVisualizer5Wrapper = ({ theme }) => {
           out_bps: link.out_bps ?? link.output_rate ?? link.outBps ?? link.bytes_out_rate ?? link.bytesOut ?? null,
           input_rate: link.input_rate ?? link.in_bps ?? null,
           output_rate: link.output_rate ?? link.out_bps ?? null,
+          pim_state: link.pim_state ?? link.rawLink?.pim_state,
+          pim_uptime: link.pim_uptime ?? link.rawLink?.pim_uptime,
+          mpls_ldp_state: link.mpls_ldp_state ?? link.rawLink?.mpls_ldp_state,
+          mpls_uptime: link.mpls_uptime ?? link.rawLink?.mpls_uptime,
           rawLink: link,
           isVisibleOnMap: isBothDevicesVisible,
         };

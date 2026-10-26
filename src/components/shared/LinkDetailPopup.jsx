@@ -835,12 +835,22 @@ const LinkDetailPopup = ({
     delete itemData.rawLink.ospf_state_duration_seconds;
     delete itemData.rawLink.ospfUpTimeSeconds;
     delete itemData.rawLink.ospfStateDurationSeconds;
+    delete itemData.rawLink.is_pim_up;
+    delete itemData.rawLink.mpls_enabled;
+    delete itemData.rawLink.is_mpls_up;
+    delete itemData.rawLink.pim_uptime_seconds;
+    delete itemData.rawLink.mpls_uptime_seconds;
   }
   delete itemData.ospf_uptime_seconds;
   delete itemData.ospf_up_time_seconds;
   delete itemData.ospf_state_duration_seconds;
   delete itemData.ospfUpTimeSeconds;
   delete itemData.ospfStateDurationSeconds;
+  delete itemData.is_pim_up;
+  delete itemData.mpls_enabled;
+  delete itemData.is_mpls_up;
+  delete itemData.pim_uptime_seconds;
+  delete itemData.mpls_uptime_seconds;
 
   const rawLastPing = getValue(
     itemData?.last_ping_at,
@@ -1098,6 +1108,9 @@ const LinkDetailPopup = ({
 
               if (
                 key === "is_ospf_full" ||
+                key === "is_pim_up" ||
+                key === "mpls_enabled" ||
+                key === "is_mpls_up" ||
                 key === "link_drops_last_24h" ||
                 key === "ospf_drops_last_24h" ||
                 key === "ospf_up_time_seconds" ||
@@ -1139,7 +1152,13 @@ const LinkDetailPopup = ({
                     {entries.map(([key, value]) => {
                       const formattedKey = key
                         .split("_")
-                        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                        .map((word) => {
+                          const upper = word.toUpperCase();
+                          if (["PIM", "MPLS", "LDP", "OSPF", "IP", "MTU", "BW", "TX", "RX", "CRC", "ID"].includes(upper)) {
+                            return upper;
+                          }
+                          return word.charAt(0).toUpperCase() + word.slice(1);
+                        })
                         .join(" ");
 
                       let displayValue = value;
@@ -1187,6 +1206,13 @@ const LinkDetailPopup = ({
                         return null;
                       } else if (key === "ospf" || key === "ospf_state") {
                         valueColorClass = getOspfStateColor(value, isDark).textClass;
+                      } else if (key === "pim_state" || key === "pim") {
+                        valueColorClass = getStatusColor(value, isDark).textClass;
+                      } else if (key === "mpls_ldp_state" || key === "mpls_state" || key === "mpls") {
+                        const vLower = String(value).toLowerCase();
+                        valueColorClass = (vLower === "oper" || vLower === "up" || vLower === "established")
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : getStatusColor(value, isDark).textClass;
                       }
                       // REMOVED: else { valueColorClass = getStatusColor(value, isDark).textClass; }
 

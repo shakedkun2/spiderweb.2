@@ -140,6 +140,11 @@ export function createLinkPopupPayload(linkDataObject) {
   delete cleanRaw.ospf_state_duration_seconds;
   delete cleanRaw.ospfUpTimeSeconds;
   delete cleanRaw.ospfStateDurationSeconds;
+  delete cleanRaw.is_pim_up;
+  delete cleanRaw.mpls_enabled;
+  delete cleanRaw.is_mpls_up;
+  delete cleanRaw.pim_uptime_seconds;
+  delete cleanRaw.mpls_uptime_seconds;
 
   const payload = {
     ...cleanRaw,
@@ -196,6 +201,11 @@ export function createLinkPopupPayload(linkDataObject) {
   delete payload.ospf_state_duration_seconds;
   delete payload.ospfUpTimeSeconds;
   delete payload.ospfStateDurationSeconds;
+  delete payload.is_pim_up;
+  delete payload.mpls_enabled;
+  delete payload.is_mpls_up;
+  delete payload.pim_uptime_seconds;
+  delete payload.mpls_uptime_seconds;
 
   return payload;
 }
